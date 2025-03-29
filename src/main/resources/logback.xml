@@ -40,18 +40,18 @@
         </encoder>
     </appender>
 
-    <root level="INFO">
+    <!--<root level="INFO">
         <appender-ref ref="Simple"/>
         <appender-ref ref="File"/>
-    </root>
+    </root>-->
     <!--<root level="DEBUG">
         <appender-ref ref="Simple"/>
         <appender-ref ref="File"/>
     </root>-->
 
-    <!--<root level="TRACE">
+    <root level="TRACE">
         <appender-ref ref="Simple"/>
         <appender-ref ref="File"/>
-    </root>-->
+    </root>
 
 </configuration>
