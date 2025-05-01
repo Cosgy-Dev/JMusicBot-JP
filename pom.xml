@@ -47,7 +47,7 @@
         <dependency>
             <groupId>net.dv8tion</groupId>
             <artifactId>JDA</artifactId>
-            <version>5.2.2</version>
+            <version>5.5.0</version>
         </dependency>
         <dependency>
             <groupId>dev.arbjerg</groupId>
@@ -57,7 +57,7 @@
         <dependency>
             <groupId>dev.lavalink.youtube</groupId>
             <artifactId>v2</artifactId>
-            <version>1.12.0</version>
+            <version>1.13.0</version>
         </dependency>
         <dependency>
             <groupId>com.github.Cosgy-Dev</groupId>
