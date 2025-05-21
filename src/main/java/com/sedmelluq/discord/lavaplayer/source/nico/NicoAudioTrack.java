@@ -78,23 +78,38 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
         if (Files.notExists(file)) {
             try {
                 log.info("Downloading NicoNico track from: {}", getIdentifier());
-                Runtime runtime = Runtime.getRuntime();
+                List<String> command = new java.util.ArrayList<>();
+                command.add("yt-dlp");
 
-                String login = "";
                 if (NicoAudioSourceManager.userName != null && NicoAudioSourceManager.password != null) {
-                    login += " --username " + NicoAudioSourceManager.userName + " --password " + NicoAudioSourceManager.password;
+                    command.add("--username");
+                    command.add(NicoAudioSourceManager.userName);
+                    command.add("--password");
+                    command.add(NicoAudioSourceManager.password);
                     log.info("ニコニコのログイン情報を使用しました。");
-                    if(NicoAudioSourceManager.twofactor != null) {
+                    if (NicoAudioSourceManager.twofactor != null) {
+                        // 二段階認証コードのフォーマットチェック（任意: 6桁数字等）
                         String code = TOTPGenerator.getCode(NicoAudioSourceManager.twofactor);
-
-                        login += " --twofactor " + code;
-                        log.info("二段階認証を行いました:{}", code);
+                        if (code != null && code.matches("\\d{6}")) {
+                            command.add("--twofactor");
+                            command.add(code);
+                            log.info("二段階認証を行いました:{}", code);
+                        } else {
+                            log.warn("無効な二段階認証コード:{}", code);
+                        }
                     }
                 }
 
-                String command = "yt-dlp" + login + " --extract-audio --audio-format wav https://www.nicovideo.jp/watch/" + getIdentifier() + " --output cache/" + getIdentifier() + ".wav";
+                command.add("--extract-audio");
+                command.add("--audio-format");
+                command.add("wav");
+                command.add("https://www.nicovideo.jp/watch/" + getIdentifier());
+                command.add("--output");
+                command.add("cache/" + getIdentifier() + ".wav");
 
-                Process process = runtime.exec(command);
+                ProcessBuilder processBuilder = new ProcessBuilder(command);
+                processBuilder.directory(new File(path)); // カレントディレクトリを設定（必要に応じて）
+                Process process = processBuilder.start();
 
                 // エラーストリームを読み取るためのスレッドを作成
                 new Thread(() -> {
