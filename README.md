@@ -1,4 +1,4 @@
-<img align="right" src="https://i.imgur.com/zrE80HY.png" height="200" width="200">
+<img align="right" src="https://i.imgur.com/zrE80HY.png" height="200" width="200" alt="ロゴ">
 
 [![Downloads](https://img.shields.io/github/downloads/Cosgy-Dev/MusicBot-JP-java/total.svg)](https://github.com/Cosgy-Dev/MusicBot-JP-java/releases/latest)
 [![Stars](https://img.shields.io/github/stars/Cosgy-Dev/MusicBot-JP-java.svg)](https://github.com/Cosgy-Dev/MusicBot-JP-java/stargazers)
@@ -14,27 +14,36 @@ JMusicBotは、シンプルでかつ操作性の良いUIを使用しています
 
 [![Setup](http://i.imgur.com/VvXYp5j.png)](https://www.cosgy.dev/2019/09/06/jmusicbot-setup/)
 
-# 機能性
+# このボットの特徴
 
-* 操作が簡単(Javaがインストールされているか確認してください)
+* セットアップが簡単
 * 曲を高速にロード
-* 独自の外部キーなどは要りません。(DiscordのBotトークンを除く)
+* Discord Botトークンのみでのセットアップ
 * ラグの少ないスムーズな再生
-* DJという独自の役割
+* DJという独自の権限
 * シンプルで使いやすいUI
-* チャンネルトピックに表示される再生状態バー
-* ニコニコ動画、YouTubeや、Soundcloudなどを含む多くのサイトをサポート(ニコニコ動画、SoundCloud側の仕様変更のため再生できない楽曲があります。)
+* チャンネルトピックに表示される再生バー
+* ニコニコ動画、YouTubeや、Soundcloudなどを含む多くのサイトをサポート
 * 多数のオンラインラジオ/ストリームをサポート
-* ローカルファイルをサポート
-* 再生リストのサポート(web/youtube/ニコニコ動画/local)
+* ローカルファイルの再生
+* 再生リストのサポート
+* サーバーや個人の再生リストを作成
 
 # セットアップ
 
+このボットはJava11以上のバージョンが必要です。
+Javaがインストールされていない場合は、[こちら](https://www.oracle.com/jp/java/technologies/downloads/) からダウンロードしてください。
 このボットを自分で起動するには [Cosgy Dev 公式ページ](https://www.cosgy.dev/2019/09/06/jmusicbot-setup/) を参照してください
 
 # Dockerを使用したセットアップ
 
-Dockerを使用してこのボットを自分で起動するには [こちら](https://hub.docker.com/r/cyberrex/jmusicbot-jp) を参照してください
+Dockerを使用してJavaのインストールなどを行わずにこのボットを自分で起動することができます。
+Dockerを使用する場合は、[こちら](https://hub.docker.com/r/cyberrex/jmusicbot-jp) を参照してください。
+
+# 注意
+
+このボットは公開ボットとして使用することはできません。
+個人や小規模のサーバーでの使用を推奨します。
 
 # 質問/提案/バグレポート
 
@@ -42,8 +51,9 @@ Dockerを使用してこのボットを自分で起動するには [こちら](h
 ボットの機能の変更を提案したり、カスタマイズ・オプションを推奨したり、バグを報告したりしたい場合には、このリポジトリーでIssueを開くか、あるいは [Discordサーバー](https://discord.gg/RBpkHxf)
 に参加してください。(注意:
 追加のAPIキーを必要とする機能リクエストや音楽以外の機能は受け付けません)。
-<br>このBotが好きでしたら、このBotに使われているライブラリにStarを追加してください:<br>[JDA](https://github.com/DV8FromTheWorld/JDA)
-と [lavaplayer](https://github.com/sedmelluq/lavaplayer)
+<br>このボットを気に入っていただけましたらこのリポジトリにStarをしていただけると幸いです。
+また、このボットの開発に必要不可欠な依存ライブラリ[JDA](https://github.com/DV8FromTheWorld/JDA)
+と [lavaplayer](https://github.com/lavalink-devs/lavaplayer)にもStarをしていただけると幸いです。
 
 # コマンドの例
 

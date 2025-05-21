@@ -74,13 +74,16 @@ public class PlayCmd extends MusicCommand {
         this.aliases = bot.getConfig().getAliases(this.name);
         this.beListening = true;
         this.bePlaying = false;
-        this.children = new SlashCommand[]{new PlaylistCmd(bot), new MylistCmd(bot), new PublistCmd(bot), new RequestCmd(bot)};
+
+        List<OptionData> options = new ArrayList<>();
+        options.add(new OptionData(OptionType.STRING, "input", "URLまたは曲名", false));
+        this.options = options;
+
+        //this.children = new SlashCommand[]{new PlaylistCmd(bot), new MylistCmd(bot), new PublistCmd(bot), new RequestCmd(bot)};
     }
 
     @Override
     public void doCommand(CommandEvent event) {
-
-
 
         if (event.getArgs().isEmpty() && event.getMessage().getAttachments().isEmpty()) {
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
@@ -169,7 +172,201 @@ public class PlayCmd extends MusicCommand {
     }
 
     @Override
-    public void doCommand(SlashCommandEvent slashCommandEvent) {
+    public void doCommand(SlashCommandEvent event) {
+
+        if (event.getOption("input") == null) {
+            AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
+            if (handler.getPlayer().getPlayingTrack() != null && handler.getPlayer().isPaused()) {
+                if (DJCommand.checkDJPermission(event.getClient(), event)) {
+
+                    handler.getPlayer().setPaused(false);
+                    event.reply(event.getClient().getSuccess() + "**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**の再生を再開しました。").queue();
+
+                    Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PLAYING);
+                } else
+                    event.reply(event.getClient().getError() + "再生を再開できるのはDJのみです！").queue();
+                return;
+            }
+
+            // キャッシュの読み込み機構
+            if (bot.getCacheLoader().cacheExists(event.getGuild().getId())) {
+                List<Cache> data = bot.getCacheLoader().GetCache(event.getGuild().getId());
+
+                AtomicInteger count = new AtomicInteger();
+                CacheLoader.CacheResult cache = bot.getCacheLoader().ConvertCache(data);
+                event.reply(":calling: キャッシュファイルを読み込んでいます... (" + cache.getItems().size() + "曲)").queue(m -> {
+                    cache.loadTracks(bot.getPlayerManager(), (at) -> {
+                        // TODO:キャッシュに保存されているユーザーIDを使用する。
+                        handler.addTrack(new QueuedTrack(at, event.getUser()));
+                        count.getAndIncrement();
+                    }, () -> {
+                        StringBuilder builder = new StringBuilder(cache.getTracks().isEmpty()
+                                ? event.getClient().getWarning() + " 楽曲がロードされていません。"
+                                : event.getClient().getSuccess() + " キャッシュファイルから、" + "**" + cache.getTracks().size() + "**曲読み込みました。");
+                        if (!cache.getErrors().isEmpty())
+                            builder.append("\n以下の楽曲をロードできませんでした:");
+                        cache.getErrors().forEach(err -> builder.append("\n`[").append(err.getIndex() + 1).append("]` **").append(err.getItem()).append("**: ").append(err.getReason()));
+                        String str = builder.toString();
+                        if (str.length() > 2000)
+                            str = str.substring(0, 1994) + " (以下略)";
+                        m.editOriginal(FormatUtil.filter(str)).queue();
+                    });
+                });
+                try {
+                    bot.getCacheLoader().deleteCache(event.getGuild().getId());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+                return;
+            }
+
+            if (handler.playFromDefault()) {
+                Settings settings = event.getClient().getSettingsFor(event.getGuild());
+                handler.stopAndClear();
+                Playlist playlist = bot.getPlaylistLoader().getPlaylist(event.getGuild().getId(), settings.getDefaultPlaylist());
+                if (playlist == null) {
+                    event.reply("プレイリストフォルダに`" + event.getOption("input").getAsString() + ".txt`が見つかりませんでした。").queue();
+                    return;
+                }
+                event.reply(loadingEmoji + " プレイリストを読み込んでいます**" + settings.getDefaultPlaylist() + " ** ...（ " + playlist.getItems().size() + "曲）").queue(m ->
+                {
+
+                    playlist.loadTracks(bot.getPlayerManager(), (at) -> handler.addTrack(new QueuedTrack(at, event.getUser())), () -> {
+                        StringBuilder builder = new StringBuilder(playlist.getTracks().isEmpty()
+                                ? event.getClient().getWarning() + " 曲がロードされていません！"
+                                : event.getClient().getSuccess() + " ** " + playlist.getTracks().size() + " **曲をロードしました！");
+                        if (!playlist.getErrors().isEmpty())
+                            builder.append("\n次の曲を読み込めませんでした。:");
+                        playlist.getErrors().forEach(err -> builder.append("\n`[").append(err.getIndex() + 1).append("]` **").append(err.getItem()).append("**: ").append(err.getReason()));
+                        String str = builder.toString();
+                        if (str.length() > 2000)
+                            str = str.substring(0, 1994) + " (...)";
+                        m.editOriginal(FormatUtil.filter(str)).queue();
+                    });
+                });
+                return;
+
+            }
+
+            StringBuilder builder = new StringBuilder(event.getClient().getWarning() + " Play コマンド:\n");
+            builder.append("\n`").append(event.getClient().getPrefix()).append(name).append(" <曲名>` - YouTubeから最初の結果を再生");
+            builder.append("\n`").append(event.getClient().getPrefix()).append(name).append(" <URL>` - 指定された曲、再生リスト、またはストリームを再生します");
+            for (Command cmd : children)
+                builder.append("\n`").append(event.getClient().getPrefix()).append(name).append(" ").append(cmd.getName()).append(" ").append(cmd.getArguments()).append("` - ").append(cmd.getHelp());
+            event.reply(builder.toString()).queue();
+            return;
+        }
+        event.reply(loadingEmoji + "`[" + event.getOption("input").getAsString() + "]`を読み込み中です…").queue(m -> bot.getPlayerManager().loadItemOrdered(event.getGuild(), event.getOption("input").getAsString(), new SlashResultHandler(m, event, false)));
+
+    }
+
+    public class SlashResultHandler implements AudioLoadResultHandler {
+        private final InteractionHook m;
+        private final SlashCommandEvent event;
+        private final boolean ytsearch;
+
+        SlashResultHandler(InteractionHook m, SlashCommandEvent event, boolean ytsearch) {
+            this.m = m;
+            this.event = event;
+            this.ytsearch = ytsearch;
+        }
+
+        private void loadSingle(AudioTrack track, AudioPlaylist playlist) {
+            if (bot.getConfig().isTooLong(track)) {
+                m.editOriginal(FormatUtil.filter(event.getClient().getWarning() +
+                        " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title) + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。")).queue();
+                return;
+            }
+            AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
+            int pos = handler.addTrack(new QueuedTrack(track, event.getUser())) + 1;
+
+            // Output MSG ex:
+            // <タイトル><(長さ)> を追加しました。
+            // <タイトル><(長さ)> を再生待ちの<再生待ち番号>番目に追加しました。
+            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
+                    + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
+            if (playlist == null || !event.getGuild().getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_ADD_REACTION)) {
+                m.editOriginal(addMsg).queue();
+            } else {
+                new ButtonMenu.Builder()
+                        .setText(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
+                        .setChoices(LOAD, CANCEL)
+                        .setEventWaiter(bot.getWaiter())
+                        .setTimeout(30, TimeUnit.SECONDS)
+                        .setAction(re ->
+                        {
+                            if (re.getName().equals(LOAD))
+                                m.editOriginal(addMsg + "\n" + event.getClient().getSuccess() + "**" + loadPlaylist(playlist, track) + "**曲を再生待ちに追加しました!").queue();
+                            else
+                                m.editOriginal(addMsg).queue();
+                        }).setFinalAction(m ->
+                        {
+                            try {
+                                m.clearReactions().queue();
+                                m.delete().queue();
+                            } catch (PermissionException ignore) {
+                            }
+                        }).build().display(event.getChannel());
+            }
+        }
+
+        private int loadPlaylist(AudioPlaylist playlist, AudioTrack exclude) {
+            int[] count = {0};
+            playlist.getTracks().forEach((track) -> {
+                if (!bot.getConfig().isTooLong(track) && !track.equals(exclude)) {
+                    AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
+                    handler.addTrack(new QueuedTrack(track, event.getUser()));
+                    count[0]++;
+                }
+            });
+            return count[0];
+        }
+
+        @Override
+        public void trackLoaded(AudioTrack track) {
+            loadSingle(track, null);
+        }
+
+        @Override
+        public void playlistLoaded(AudioPlaylist playlist) {
+            if (playlist.getTracks().size() == 1 || playlist.isSearchResult()) {
+                AudioTrack single = playlist.getSelectedTrack() == null ? playlist.getTracks().get(0) : playlist.getSelectedTrack();
+                loadSingle(single, null);
+            } else if (playlist.getSelectedTrack() != null) {
+                AudioTrack single = playlist.getSelectedTrack();
+                loadSingle(single, playlist);
+            } else {
+                int count = loadPlaylist(playlist, null);
+                if (count == 0) {
+                    m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " このプレイリスト内" + (playlist.getName() == null ? "" : "(**" + playlist.getName()
+                            + "**) ") + "は、許可された最大長より長いです。(`" + bot.getConfig().getMaxTime() + "`)")).queue();
+                } else {
+                    m.editOriginal(FormatUtil.filter(event.getClient().getSuccess()
+                            + (playlist.getName() == null ? "再生リスト" : "再生リスト **" + playlist.getName() + "**") + " の `"
+                            + playlist.getTracks().size() + "` 曲を再生待ちに追加しました。"
+                            + (count < playlist.getTracks().size() ? "\n" + event.getClient().getWarning() + " 許可されている最大長より長いトラック (`"
+                            + bot.getConfig().getMaxTime() + "`) 省略されています。" : ""))).queue();
+                }
+            }
+        }
+
+        @Override
+        public void noMatches() {
+            if (ytsearch)
+                m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " の検索結果はありません `" + event.getOption("input").getAsString() + "`.")).queue();
+            else
+                bot.getPlayerManager().loadItemOrdered(event.getGuild(), "ytsearch:" + event.getOption("input").getAsString(), new SlashResultHandler(m, event, true));
+        }
+
+        @Override
+        public void loadFailed(FriendlyException throwable) {
+            if (throwable.severity == Severity.COMMON) {
+                m.editOriginal(event.getClient().getError() + " 読み込み中にエラーが発生しました: " + throwable.getMessage()).queue();
+            } else {
+
+                m.editOriginal(event.getClient().getError() + "曲の読み込み中にエラーが発生しました。").queue();
+            }
+        }
     }
 
     private class ResultHandler implements AudioLoadResultHandler {
@@ -402,114 +599,7 @@ public class PlayCmd extends MusicCommand {
             event.reply(loadingEmoji + "`[" + event.getOption("input").getAsString() + "]`を読み込み中です…").queue(m -> bot.getPlayerManager().loadItemOrdered(event.getGuild(), event.getOption("input").getAsString(), new SlashResultHandler(m, event, false)));
         }
 
-        public class SlashResultHandler implements AudioLoadResultHandler {
-            private final InteractionHook m;
-            private final SlashCommandEvent event;
-            private final boolean ytsearch;
 
-            SlashResultHandler(InteractionHook m, SlashCommandEvent event, boolean ytsearch) {
-                this.m = m;
-                this.event = event;
-                this.ytsearch = ytsearch;
-            }
-
-            private void loadSingle(AudioTrack track, AudioPlaylist playlist) {
-                if (bot.getConfig().isTooLong(track)) {
-                    m.editOriginal(FormatUtil.filter(event.getClient().getWarning() +
-                            " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title) + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。")).queue();
-                    return;
-                }
-                AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
-                int pos = handler.addTrack(new QueuedTrack(track, event.getUser())) + 1;
-
-                // Output MSG ex:
-                // <タイトル><(長さ)> を追加しました。
-                // <タイトル><(長さ)> を再生待ちの<再生待ち番号>番目に追加しました。
-                String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
-                        + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
-                if (playlist == null || !event.getGuild().getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_ADD_REACTION)) {
-                    m.editOriginal(addMsg).queue();
-                } else {
-                    new ButtonMenu.Builder()
-                            .setText(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                            .setChoices(LOAD, CANCEL)
-                            .setEventWaiter(bot.getWaiter())
-                            .setTimeout(30, TimeUnit.SECONDS)
-                            .setAction(re ->
-                            {
-                                if (re.getName().equals(LOAD))
-                                    m.editOriginal(addMsg + "\n" + event.getClient().getSuccess() + "**" + loadPlaylist(playlist, track) + "**曲を再生待ちに追加しました!").queue();
-                                else
-                                    m.editOriginal(addMsg).queue();
-                            }).setFinalAction(m ->
-                            {
-                                try {
-                                    m.clearReactions().queue();
-                                    m.delete().queue();
-                                } catch (PermissionException ignore) {
-                                }
-                            }).build().display(event.getChannel());
-                }
-            }
-
-            private int loadPlaylist(AudioPlaylist playlist, AudioTrack exclude) {
-                int[] count = {0};
-                playlist.getTracks().forEach((track) -> {
-                    if (!bot.getConfig().isTooLong(track) && !track.equals(exclude)) {
-                        AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
-                        handler.addTrack(new QueuedTrack(track, event.getUser()));
-                        count[0]++;
-                    }
-                });
-                return count[0];
-            }
-
-            @Override
-            public void trackLoaded(AudioTrack track) {
-                loadSingle(track, null);
-            }
-
-            @Override
-            public void playlistLoaded(AudioPlaylist playlist) {
-                if (playlist.getTracks().size() == 1 || playlist.isSearchResult()) {
-                    AudioTrack single = playlist.getSelectedTrack() == null ? playlist.getTracks().get(0) : playlist.getSelectedTrack();
-                    loadSingle(single, null);
-                } else if (playlist.getSelectedTrack() != null) {
-                    AudioTrack single = playlist.getSelectedTrack();
-                    loadSingle(single, playlist);
-                } else {
-                    int count = loadPlaylist(playlist, null);
-                    if (count == 0) {
-                        m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " このプレイリスト内" + (playlist.getName() == null ? "" : "(**" + playlist.getName()
-                                + "**) ") + "は、許可された最大長より長いです。(`" + bot.getConfig().getMaxTime() + "`)")).queue();
-                    } else {
-                        m.editOriginal(FormatUtil.filter(event.getClient().getSuccess()
-                                + (playlist.getName() == null ? "再生リスト" : "再生リスト **" + playlist.getName() + "**") + " の `"
-                                + playlist.getTracks().size() + "` 曲を再生待ちに追加しました。"
-                                + (count < playlist.getTracks().size() ? "\n" + event.getClient().getWarning() + " 許可されている最大長より長いトラック (`"
-                                + bot.getConfig().getMaxTime() + "`) 省略されています。" : ""))).queue();
-                    }
-                }
-            }
-
-            @Override
-            public void noMatches() {
-                if (ytsearch)
-                    m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " の検索結果はありません `" + event.getOption("input").getAsString() + "`.")).queue();
-                else
-                    bot.getPlayerManager().loadItemOrdered(event.getGuild(), "ytsearch:" + event.getOption("input").getAsString(), new SlashResultHandler(m, event, true));
-            }
-
-            @Override
-            public void loadFailed(FriendlyException throwable) {
-                if (throwable.severity == Severity.COMMON) {
-                    m.editOriginal(event.getClient().getError() + " 読み込み中にエラーが発生しました: " + throwable.getMessage()).queue();
-                } else {
-
-                    m.editOriginal(event.getClient().getError() + "曲の読み込み中にエラーが発生しました。").queue();
-                }
-            }
-        }
     }
 
 

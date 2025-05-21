@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.util.HashMap;
 
 /**
@@ -64,10 +65,22 @@ public class SettingsManager implements GuildSettingsManager {
                         o.has("prefix") ? o.getString("prefix") : null,
                         o.has("bitrate_warnings_readied") && o.getBoolean("bitrate_warnings_readied"),
                         o.has("announce") ? o.getInt("announce") : 0,
-                        o.has("skip_ratio") ? o.getDouble("skip_ratio") : SKIP_RATIO));
+                        o.has("skip_ratio") ? o.getDouble("skip_ratio") : SKIP_RATIO,
+                        o.has("vc_status") && o.getBoolean("vc_status"),
+                        o.has("force_to_end_que") && o.getBoolean("force_to_end_que")));
             });
-        } catch (IOException | JSONException e) {
-            LoggerFactory.getLogger("Settings").warn("サーバー設定を読み込めませんでした(まだ設定がない場合は正常です): " + e);
+        } catch (NoSuchFileException e) {
+            // ignore, it just means no settings have been saved yet
+            // create an empty json file
+            try {
+                LoggerFactory.getLogger("Settings").info("serversettings.json を" + OtherUtil.getPath("serversettings.json").toAbsolutePath() + "に作成しました。");
+                Files.write(OtherUtil.getPath("serversettings.json"), new JSONObject().toString(4).getBytes());
+            } catch(IOException ex) {
+                LoggerFactory.getLogger("Settings").warn("サーバー設定ファイルの作成に失敗しました:"+ex);
+            }
+            return;
+        } catch(IOException | JSONException e) {
+            LoggerFactory.getLogger("Settings").warn("サーバー設定ファイルの読み込みに失敗しました: "+e);
         }
     }
 
@@ -87,7 +100,7 @@ public class SettingsManager implements GuildSettingsManager {
     }
 
     private Settings createDefaultSettings() {
-        return new Settings(this, 0, 0, 0, 10, null, RepeatMode.OFF, null, false, 0, SKIP_RATIO);
+        return new Settings(this, 0, 0, 0, 10, null, RepeatMode.OFF, null, false, 0, SKIP_RATIO, true, false);
     }
 
     protected void writeSettings() {
@@ -113,6 +126,11 @@ public class SettingsManager implements GuildSettingsManager {
                 o.put("announce", s.getAnnounce());
             if (s.getSkipRatio() != SKIP_RATIO)
                 o.put("skip_ratio", s.getSkipRatio());
+            if (!s.getVCStatus())
+                o.put("vc_status", s.getVCStatus());
+            if(s.isForceToEndQue())
+                o.put("force_to_end_que", s.isForceToEndQue());
+
             obj.put(Long.toString(key), o);
         }
         try {

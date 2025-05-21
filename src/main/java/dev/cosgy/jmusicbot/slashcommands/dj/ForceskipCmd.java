@@ -21,6 +21,10 @@ import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.RequestMetadata;
 import dev.cosgy.jmusicbot.slashcommands.DJCommand;
+import net.dv8tion.jda.api.interactions.commands.OptionType;
+import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+
+import static net.dv8tion.jda.internal.utils.Helpers.listOf;
 
 /**
  * @author John Grosh <john.a.grosh@gmail.com>

@@ -28,15 +28,19 @@ public class nicoSearchAPI {
         if (resultLimit <= 0) resultLimit = 10;
         if (cacheEnabled && videoResultCache == null) videoResultCache = new LinkedHashMap<>();
 
+        // https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q=初音ミク&targets=title&fields=contentId,title,viewCounter&filters[viewCounter][gte]=10000&_sort=-viewCounter&_offset=0&_limit=3&_context=apiguide
+        // https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search?q=初音ミク&_limit=5&_context=discord_bot&fields=contentId,title,description,tags,categoryTags,viewCounter,mylistCounter,commentCounter,startTime,lastCommentTime,lengthSeconds,thumbnailUrl&_sort=-viewCounter&targets=title
+
         HTTPUtil hu = new HTTPUtil();
-        hu.setTargetAddress("https://api.search.nicovideo.jp/api/v2/video/contents/search");
+        hu.setTargetAddress("https://snapshot.search.nicovideo.jp/api/v2/snapshot/video/contents/search");
         hu.setMethod("GET");
         Map<String, String> queryMap = new HashMap<>();
         queryMap.put("q", URLEncoder.encode(query, StandardCharsets.UTF_8));
         queryMap.put("_sort", "-viewCounter");
         queryMap.put("targets", "title");
-        queryMap.put("fields", "contentId,title,description,tags,categoryTags,viewCounter,mylistCounter,commentCounter,startTime,lastCommentTime,lengthSeconds,thumbnailUrl");
+        queryMap.put("fields", "contentId,title,description,userId,channelId,viewCounter,thumbnailUrl,categoryTags,tags,mylistCounter,commentCounter,startTime");
         queryMap.put("_limit", String.valueOf(resultLimit));
+        queryMap.put("_context", "discord_bot");
         hu.setQueryMap(queryMap);
 
         LinkedList<nicoVideoSearchResult> results = new LinkedList<>();

@@ -53,6 +53,7 @@ public class AutoplaylistCmd extends AdminCommand {
             event.reply(event.getClient().getWarning() + "権限がないため実行できません。").queue();
             return;
         }
+        
         String pName = event.getOption("name").getAsString();
         if (pName.toLowerCase().matches("(none|なし)")) {
             Settings settings = event.getClient().getSettingsFor(event.getGuild());

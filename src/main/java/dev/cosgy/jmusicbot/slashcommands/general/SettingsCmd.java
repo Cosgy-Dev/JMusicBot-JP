@@ -59,6 +59,7 @@ public class SettingsCmd extends SlashCommand {
                         + "\nDJ 権限: " + (role == null ? "未設定" : "**" + role.getName() + "**")
                         + "\nリピート: **" + (s.getRepeatMode() == RepeatMode.ALL ? "有効(全曲リピート)" : (s.getRepeatMode() == RepeatMode.SINGLE ? "有効(1曲リピート)" : "無効")) + "**"
                         + "\n音量:**" + (s.getVolume()) + "**"
+                        + "\n再生待ち追加モード: **" + (s.isForceToEndQue() ? "通常モード" : "フェアモード") + "**"
                         + "\nデフォルトプレイリスト: " + (s.getDefaultPlaylist() == null ? "なし" : "**" + s.getDefaultPlaylist() + "**")
                 )
                 .setFooter(String.format(
@@ -85,6 +86,7 @@ public class SettingsCmd extends SlashCommand {
                         + "\n専用ボイスチャンネル: " + (vChan == null ? "なし" : "**" + vChan.getName() + "**")
                         + "\nDJ 権限: " + (role == null ? "未設定" : "**" + role.getName() + "**")
                         + "\nリピート: **" + (s.getRepeatMode() == RepeatMode.ALL ? "有効(全曲リピート)" : (s.getRepeatMode() == RepeatMode.SINGLE ? "有効(1曲リピート)" : "無効")) + "**"
+                        + "\n再生待ち追加モード: **" + (s.isForceToEndQue() ? "通常モード" : "フェアモード") + "**"
                         + "\nデフォルトプレイリスト: " + (s.getDefaultPlaylist() == null ? "なし" : "**" + s.getDefaultPlaylist() + "**")
                 )
                 .setFooter(String.format(

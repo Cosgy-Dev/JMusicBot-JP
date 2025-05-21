@@ -181,10 +181,12 @@ public class NicoSearchCmd extends MusicCommand {
     }
 
     private class SlashResultHandler implements AudioLoadResultHandler {
+        private final InteractionHook m;
         private final SlashCommandEvent event;
         private final Bot bot;
 
         private SlashResultHandler(InteractionHook m, SlashCommandEvent event, Bot bot) {
+            this.m = m;
             this.bot = bot;
             this.event = event;
         }
@@ -197,7 +199,7 @@ public class NicoSearchCmd extends MusicCommand {
         @Override
         public void trackLoaded(AudioTrack track) {
             if (bot.getConfig().isTooLong(track)) {
-                event.reply(FormatUtil.filter(event.getClient().getWarning() + " 楽曲 (**" + track.getInfo().title + "**) は許容されている動画の長さを超えています: `"
+                m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " 楽曲 (**" + track.getInfo().title + "**) は許容されている動画の長さを超えています: `"
                         + FormatUtil.formatTime(track.getDuration()) + "` > `" + bot.getConfig().getMaxTime() + "`")).queue();
                 return;
             }
@@ -205,7 +207,7 @@ public class NicoSearchCmd extends MusicCommand {
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrack(new QueuedTrack(track, event.getUser())) + 1;
 
-            event.reply(FormatUtil.filter(String.format("%s %s **%s** (`%s`) を追加しました", event.getClient().getSuccess(), (pos == 0 ? "再生待ちに" : "再生待ち #" + pos + " に"), track.getInfo().title, FormatUtil.formatTime(track.getDuration())))).queue();
+            m.editOriginal(FormatUtil.filter(String.format("%s %s **%s** (`%s`) を追加しました", event.getClient().getSuccess(), (pos == 0 ? "再生待ちに" : "再生待ち #" + pos + " に"), track.getInfo().title, FormatUtil.formatTime(track.getDuration())))).queue();
         }
 
         /**
@@ -223,7 +225,7 @@ public class NicoSearchCmd extends MusicCommand {
          */
         @Override
         public void noMatches() {
-            event.reply(FormatUtil.filter(event.getClient().getWarning() + " `" + event.getOption("input").getAsString() + "`の検索結果はありません.")).queue();
+            m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + " `" + event.getOption("input").getAsString() + "`の検索結果はありません.")).queue();
         }
 
         /**
@@ -234,9 +236,9 @@ public class NicoSearchCmd extends MusicCommand {
         @Override
         public void loadFailed(FriendlyException exception) {
             if (exception.severity == FriendlyException.Severity.COMMON)
-                event.reply(event.getClient().getError() + " 読み込み中にエラーが発生しました: " + exception.getMessage()).queue();
+                m.editOriginal(event.getClient().getError() + " 読み込み中にエラーが発生しました: " + exception.getMessage()).queue();
             else
-                event.reply(event.getClient().getError() + " 楽曲を読み込み中にエラーが発生しました").queue();
+                m.editOriginal(event.getClient().getError() + " 楽曲を読み込み中にエラーが発生しました").queue();
         }
     }
 }

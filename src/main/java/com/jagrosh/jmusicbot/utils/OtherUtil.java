@@ -17,8 +17,11 @@ package com.jagrosh.jmusicbot.utils;
 
 import com.jagrosh.jmusicbot.JMusicBot;
 import com.jagrosh.jmusicbot.entities.Prompt;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Activity;
+import net.dv8tion.jda.api.entities.ApplicationInfo;
+import net.dv8tion.jda.api.entities.User;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -120,6 +123,7 @@ public class OtherUtil {
         if (game == null || game.trim().isEmpty() || game.trim().equalsIgnoreCase("default"))
             return null;
         String lower = game.toLowerCase();
+
         if (lower.startsWith("playing"))
             return Activity.playing(makeNonEmpty(game.substring(7).trim()));
         if (lower.startsWith("listening to"))
@@ -134,7 +138,7 @@ public class OtherUtil {
                 return Activity.streaming(makeNonEmpty(parts[1]), "https://twitch.tv/" + parts[0]);
             }
         }
-        return Activity.playing(game);
+        return Activity.customStatus(game);
     }
 
     public static String makeNonEmpty(String str) {
@@ -188,5 +192,21 @@ public class OtherUtil {
         } catch (IOException | JSONException | NullPointerException ex) {
             return null;
         }
+    }
+
+    public static String getUnsupportedBotReason(JDA jda)
+    {
+        if (jda.getSelfUser().getFlags().contains(User.UserFlag.VERIFIED_BOT))
+            return "検証済みボットのため、JMusicBot JPを使用することはサポートされていません。\n" +
+                    "VCで音楽を再生するため、権利問題が発生する可能性がある為ご理解とご協力をお願いします。";
+
+        ApplicationInfo info = jda.retrieveApplicationInfo().complete();
+        if (info.isBotPublic())
+            return "公開ボットのため、JMusicBot JPを使用することはサポートされていません。\n" +
+                    "デベロッパーポータルで「PUBLIC BOT」を無効にしてください。\n" +
+                    "https://discord.com/developers/applications/" + info.getId() + "/bot\n" +
+                    "VCで音楽を再生するため、権利問題が発生する可能性がある為ご理解とご協力をお願いします。";
+
+        return null;
     }
 }

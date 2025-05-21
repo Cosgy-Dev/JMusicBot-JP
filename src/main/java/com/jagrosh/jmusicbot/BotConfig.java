@@ -54,6 +54,7 @@ public class BotConfig {
     private String searchingEmoji;
     private String nicoEmail;
     private String nicoPass;
+    private static String nicoTwoFactor;
     private String ytEmail;
     private String ytPass;
     private String spClientId;
@@ -119,6 +120,7 @@ public class BotConfig {
             useNicoNico = config.getBoolean("useniconico");
             nicoEmail = config.getString("nicomail");
             nicoPass = config.getString("nicopass");
+            nicoTwoFactor = config.getString("nicotwofactor");
             pauseNoUsers = config.getBoolean("pausenousers");
             resumeJoined = config.getBoolean("resumejoined");
             stopNoUsers = config.getBoolean("stopnousers");
@@ -341,6 +343,8 @@ public class BotConfig {
     public String getNicoNicoPassword() {
         return nicoPass;
     }
+
+    public static String getNicoNicoTwoFactor(){ return nicoTwoFactor; }
 
     public String getYouTubeEmailAddress() {
         return ytEmail;

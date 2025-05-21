@@ -110,8 +110,8 @@ public class QueueCmd extends MusicCommand {
         builder.setText((i1, i2) -> getQueueTitle(ah, event.getClient().getSuccess(), songs.length, finTotal, settings.getRepeatMode()))
                 .setItems(songs)
                 .setUsers(event.getAuthor())
-                .setColor(event.getSelfMember().getColor())
-        ;
+                .setColor(event.getSelfMember().getColor());
+
         builder.build().paginate(event.getChannel(), pagenum);
     }
 
@@ -130,7 +130,7 @@ public class QueueCmd extends MusicCommand {
             }
             MessageCreateData nonowp = ah.getNoMusicPlaying(event.getJDA());
             MessageEditData built = new MessageEditBuilder()
-                    .setContent(client.getWarning() + " 再生待ちの楽曲はありません。")
+                    .setContent(event.getClient().getWarning() + " 再生待ちの楽曲はありません。")
                     .setEmbeds((nowp == null ? nonowp : nowp).getEmbeds().get(0)).build();
             m.editOriginal(built).queue();
             return;

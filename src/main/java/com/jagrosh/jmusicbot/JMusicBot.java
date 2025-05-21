@@ -42,7 +42,9 @@ import net.dv8tion.jda.api.utils.cache.CacheFlag;
 import org.slf4j.Logger;
 
 import java.awt.*;
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -56,10 +58,10 @@ public class JMusicBot {
     public final static String PLAY_EMOJI = "▶"; // ▶
     public final static String PAUSE_EMOJI = "⏸"; // ⏸
     public final static String STOP_EMOJI = "⏹"; // ⏹
-    public final static Permission[] RECOMMENDED_PERMS = {Permission.MESSAGE_SEND, Permission.VIEW_CHANNEL, Permission.MESSAGE_HISTORY, Permission.MESSAGE_ADD_REACTION,
+    public final static Permission[] RECOMMENDED_PERMS = {Permission.MESSAGE_SEND, Permission.MESSAGE_HISTORY, Permission.MESSAGE_ADD_REACTION,
             Permission.MESSAGE_EMBED_LINKS, Permission.MESSAGE_ATTACH_FILES, Permission.MESSAGE_MANAGE, Permission.MESSAGE_EXT_EMOJI,
-            Permission.MANAGE_CHANNEL, Permission.VOICE_CONNECT, Permission.VOICE_SPEAK, Permission.NICKNAME_CHANGE};
-    public final static GatewayIntent[] INTENTS = {GatewayIntent.DIRECT_MESSAGES, GatewayIntent.GUILD_MESSAGES, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.GUILD_EMOJIS_AND_STICKERS, GatewayIntent.MESSAGE_CONTENT}; // , GatewayIntent.MESSAGE_CONTENT
+            Permission.VOICE_CONNECT, Permission.VOICE_SPEAK, Permission.NICKNAME_CHANGE, Permission.VOICE_SET_STATUS};
+    public final static GatewayIntent[] INTENTS = {GatewayIntent.DIRECT_MESSAGES, GatewayIntent.GUILD_MESSAGES, GatewayIntent.GUILD_MESSAGE_REACTIONS, GatewayIntent.GUILD_VOICE_STATES, GatewayIntent.MESSAGE_CONTENT}; // , GatewayIntent.MESSAGE_CONTENT
     public static boolean CHECK_UPDATE = true;
     public static boolean COMMAND_AUDIT_ENABLED = false;
 
@@ -98,6 +100,31 @@ public class JMusicBot {
 
         if (!System.getProperty("java.vm.name").contains("64"))
             prompt.alert(Prompt.Level.WARNING, "Java Version", "サポートされていないJavaバージョンを使用しています。64ビット版のJavaを使用してください。");
+
+        try {
+            Process checkPython3 = Runtime.getRuntime().exec("python3 --version");
+            int python3ExitCode = checkPython3.waitFor();
+
+            if (python3ExitCode != 0) {
+                log.info("Python3 is not installed. Checking for python.");
+                Process checkPython = Runtime.getRuntime().exec("python --version");
+                BufferedReader reader = new BufferedReader(new InputStreamReader(checkPython.getInputStream()));
+                String pythonVersion = reader.readLine();
+                int pythonExitCode = checkPython.waitFor();
+
+                if (pythonExitCode == 0 && pythonVersion != null && pythonVersion.startsWith("Python 3")) {
+                    log.info("Python is version 3.x.");
+                } else {
+                    prompt.alert(Prompt.Level.WARNING, "Python", "Python (バージョン3.x)がインストールされていません。Python 3をインストールしてください。");
+                }
+            } else {
+                log.info("Python3 is installed.");
+            }
+        } catch (Exception e) {
+            prompt.alert(Prompt.Level.WARNING, "Python", "Pythonのバージョン確認中にエラーが発生しました。Python3がインストールされているか確認してください。");
+        }
+
+
 
         // load config
         BotConfig config = new BotConfig(prompt);
@@ -166,6 +193,7 @@ public class JMusicBot {
             add(new RemoveCmd(bot));
             add(new SearchCmd(bot));
             add(new SCSearchCmd(bot));
+            add(new SeekCmd(bot));
             add(new NicoSearchCmd(bot));
             add(new ShuffleCmd(bot));
             add(new SkipCmd(bot));
@@ -180,7 +208,7 @@ public class JMusicBot {
             //add(new RepeatCmd(bot));
             add(new RepeatCmd(bot));
             add(new SkipToCmd(bot));
-            add(new PlaylistCmd(bot));
+            add(new ForceToEnd(bot));
             add(new StopCmd(bot));
             //add(new VolumeCmd(bot));
             // Admin
@@ -190,6 +218,7 @@ public class JMusicBot {
             add(new SkipratioCmd(bot));
             add(new SettcCmd(bot));
             add(new SetvcCmd(bot));
+            add(new SetvcStatusCmd(bot));
             add(new AutoplaylistCmd(bot));
             add(new ServerListCmd(bot));
             // Owner
@@ -231,7 +260,7 @@ public class JMusicBot {
             }
         }
 
-        log.info(config.getConfigLocation() + " から設定を読み込みました");
+        log.info("{} から設定を読み込みました", config.getConfigLocation());
 
         // attempt to log in and start
         try {
@@ -245,13 +274,37 @@ public class JMusicBot {
                     .setBulkDeleteSplittingEnabled(true)
                     .build();
             bot.setJDA(jda);
-        } catch (InvalidTokenException ex) {
+
+            String unsupportedReason = OtherUtil.getUnsupportedBotReason(jda);
+            if (unsupportedReason != null)
+            {
+                prompt.alert(Prompt.Level.ERROR, "JMusicBot", "このDiscordボットユーザーではJMusicBotを実行できません: " + unsupportedReason);
+                try{ Thread.sleep(5000);}catch(InterruptedException ignored){} // this is awful but until we have a better way...
+                jda.shutdown();
+                System.exit(1);
+            }
+
+            // other check that will just be a warning now but may be required in the future
+            // check if the user has changed the prefix and provide info about the
+            // message content intent
+            /*if(!"@mention".equals(config.getPrefix()))
+            {
+                prompt.alert(Prompt.Level.INFO, "JMusicBot", "現在、カスタム接頭辞が設定されています。 "
+                        + "カスタム接頭辞が機能しない場合は、「MESSAGE CONTENT INTENT」が有効になっていることを確認してください。"
+                        + "https://discord.com/developers/applications/" + jda.getSelfUser().getId() + "/bot");
+            }*/
+
+        }
+        catch (InvalidTokenException ex) {
+            //ex.getCause().getMessage();
             prompt.alert(Prompt.Level.ERROR, "JMusicBot", ex + "\n" +
                     "正しい設定ファイルを編集していることを確認してください。Botトークンでのログインに失敗しました。" +
                     "正しいBotトークンを入力してください。(CLIENT SECRET ではありません!)\n" +
                     "設定ファイルの場所: " + config.getConfigLocation());
             System.exit(1);
+
         } catch (IllegalArgumentException ex) {
+
             prompt.alert(Prompt.Level.ERROR, "JMusicBot", "設定の一部が無効です:" + ex + "\n" +
                     "設定ファイルの場所: " + config.getConfigLocation());
             System.exit(1);

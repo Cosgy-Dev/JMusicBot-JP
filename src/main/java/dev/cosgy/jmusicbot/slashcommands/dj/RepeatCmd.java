@@ -52,7 +52,7 @@ public class RepeatCmd extends DJCommand {
         String args = event.getArgs();
 
         if (args.isEmpty()) {
-            log.info("変更前の再生モード:" + settings.getRepeatMode());
+            log.info("変更前の再生モード:{}", settings.getRepeatMode());
             value = (settings.getRepeatMode() == RepeatMode.OFF ? RepeatMode.ALL : (settings.getRepeatMode() == RepeatMode.ALL ? RepeatMode.SINGLE : (settings.getRepeatMode() == RepeatMode.SINGLE ? RepeatMode.OFF : settings.getRepeatMode())));
         } else if (args.equalsIgnoreCase("true") || args.equalsIgnoreCase("all") || args.equalsIgnoreCase("on")) {
             value = RepeatMode.ALL;
@@ -73,7 +73,7 @@ public class RepeatCmd extends DJCommand {
         }
 
         settings.setRepeatMode(value);
-        log.info(event.getGuild().getName() + "でリピートコマンドを実行し、設定を" + value + "に設定しました。");
+        log.info("{}でリピートコマンドを実行し、設定を{}に設定しました。", event.getGuild().getName(), value);
         event.replySuccess("リピートを `" + (value == RepeatMode.ALL ? "有効(全曲リピート)" : (value == RepeatMode.SINGLE ? "有効(1曲リピート)" : "無効")) + "` にしました。");
     }
 

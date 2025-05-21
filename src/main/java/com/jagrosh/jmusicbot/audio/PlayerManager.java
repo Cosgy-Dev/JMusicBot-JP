@@ -21,7 +21,8 @@ import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.source.nico.NicoAudioSourceManager;
-import com.sedmelluq.discord.lavaplayer.source.youtube.YoutubeAudioSourceManager;
+import dev.lavalink.youtube.YoutubeAudioSourceManager;
+import dev.lavalink.youtube.clients.*;
 import net.dv8tion.jda.api.entities.Guild;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,24 +47,30 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             );
         }
 
-        registerSourceManager(new YoutubeAudioSourceManager(
-                true,
-                bot.getConfig().getYouTubeEmailAddress(),
-                bot.getConfig().getYouTubePassword()
-        ));
+        registerSourceManager(new YoutubeAudioSourceManager(true, new Music(),
+                new TvHtml5Embedded(),
+                new AndroidMusic(),
+                new Web(),
+                new WebEmbedded(),
+                new Android(),
+                new Ios()));
+
 
         TransformativeAudioSourceManager.createTransforms(bot.getConfig().getTransforms()).forEach(this::registerSourceManager);
         AudioSourceManagers.registerRemoteSources(this);
         AudioSourceManagers.registerLocalSource(this);
+
         source(YoutubeAudioSourceManager.class).setPlaylistPageCount(10);
+        source(YoutubeAudioSourceManager.class).useOauth2(null, false);
+
 
         if (getConfiguration().getOpusEncodingQuality() != 10) {
-            logger.debug("OpusEncodingQuality は、" + getConfiguration().getOpusEncodingQuality() + "(< 10)" + ", 品質を10に設定します。");
+            logger.debug("OpusEncodingQuality は、{}(< 10), 品質を10に設定します。", getConfiguration().getOpusEncodingQuality());
             getConfiguration().setOpusEncodingQuality(10);
         }
 
         if (getConfiguration().getResamplingQuality() != AudioConfiguration.ResamplingQuality.HIGH) {
-            logger.debug("ResamplingQuality は " + getConfiguration().getResamplingQuality().name() + "(HIGHではない), 品質をHIGHに設定します。");
+            logger.debug("ResamplingQuality は {}(HIGHではない), 品質をHIGHに設定します。", getConfiguration().getResamplingQuality().name());
             getConfiguration().setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
         }
     }

@@ -4,9 +4,12 @@ import com.jagrosh.jdautilities.command.Command;
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
+import dev.cosgy.jmusicbot.playlist.MylistLoader;
+import dev.cosgy.jmusicbot.playlist.PubliclistLoader;
 import dev.cosgy.jmusicbot.playlist.PubliclistLoader.Playlist;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
 import dev.cosgy.jmusicbot.slashcommands.admin.AutoplaylistCmd;
+import dev.cosgy.jmusicbot.slashcommands.music.MylistCmd;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
 
@@ -24,14 +27,15 @@ public class PublistCmd extends OwnerCommand {
         this.bot = bot;
         this.guildOnly = false;
         this.name = "publist";
-        this.arguments = "<append|delete|make|all>";
+        this.arguments = "<append|delete|make|all|show>";
         this.help = "再生リスト管理";
         this.aliases = bot.getConfig().getAliases(this.name);
         this.children = new OwnerCommand[]{
                 new ListCmd(),
                 new AppendlistCmd(),
                 new DeletelistCmd(),
-                new MakelistCmd()
+                new MakelistCmd(),
+                new ShowTracksCmd()
         };
     }
 
@@ -56,6 +60,80 @@ public class PublistCmd extends OwnerCommand {
             this.aliases = new String[]{"default"};
             this.arguments = "<playlistname|NONE>";
             this.guildOnly = true;
+        }
+    }
+
+    public class ShowTracksCmd extends OwnerCommand {
+        public ShowTracksCmd() {
+            this.name = "show";
+            this.help = "指定した再生リスト内の曲を表示";
+            this.arguments = "<name>";
+            this.guildOnly = false;
+
+            List<OptionData> options = new ArrayList<>();
+            options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
+            this.options = options;
+        }
+
+        @Override
+        protected void execute(SlashCommandEvent event) {
+            String playlistName = event.getOption("name").getAsString();
+
+            PubliclistLoader.Playlist playlist = bot.getPublistLoader().getPlaylist(playlistName);
+            if (playlist == null) {
+                event.reply(event.getClient().getError() + " 再生リスト `" + playlistName + "` が見つかりませんでした。").queue();
+                return;
+            }
+
+            if (playlist.getItems().isEmpty()) {
+                event.reply(event.getClient().getWarning() + " 再生リスト `" + playlistName + "` に曲がありません。").queue();
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder(event.getClient().getSuccess() + " 再生リスト `" + playlistName + "` 内の曲:\n");
+            for (int i = 0; i < playlist.getItems().size(); i++) {
+                builder.append(i + 1).append(". ").append(playlist.getItems().get(i)).append("\n");
+            }
+
+            if (builder.length() > 2000) {
+                builder.setLength(1997); // Discordのメッセージ制限に対応
+                builder.append("...");
+            }
+
+            event.reply(builder.toString()).queue();
+        }
+
+        @Override
+        protected void execute(CommandEvent event) {
+            String playlistName = event.getArgs().trim();
+
+            if (playlistName.isEmpty()) {
+                event.reply(event.getClient().getError() + " プレイリスト名を指定してください。");
+                return;
+            }
+
+            PubliclistLoader.Playlist playlist = bot.getPublistLoader().getPlaylist(playlistName);
+            if (playlist == null) {
+                event.reply(event.getClient().getError() + " 再生リスト `" + playlistName + "` が見つかりませんでした。");
+                return;
+            }
+
+            if (playlist.getItems().isEmpty()) {
+                event.reply(event.getClient().getWarning() + " 再生リスト `" + playlistName + "` に曲がありません。");
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder(event.getClient().getSuccess() + " 再生リスト `" + playlistName + "` 内の曲:\n");
+            for (int i = 0; i < playlist.getItems().size(); i++) {
+                builder.append(i + 1).append(". ").append(playlist.getItems().get(i)).append("\n");
+            }
+
+            if (builder.length() > 2000) {
+                builder.setLength(1997); // Discordのメッセージ制限に対応
+                builder.append("...");
+            }
+
+            event.reply(builder.toString());
         }
     }
 

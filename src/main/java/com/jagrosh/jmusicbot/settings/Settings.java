@@ -40,9 +40,11 @@ public class Settings implements GuildSettingsProvider {
     private String prefix;
     private boolean bitrateWarningReaded;
     private double skipRatio;
+    private boolean vcStatus;
+    private boolean ForceToEndQue;
 
 
-    public Settings(SettingsManager manager, String textId, String voiceId, String roleId, int volume, String defaultPlaylist, RepeatMode repeatMode, String prefix, boolean bitrateWarningReaded, int announce, double skipRatio) {
+    public Settings(SettingsManager manager, String textId, String voiceId, String roleId, int volume, String defaultPlaylist, RepeatMode repeatMode, String prefix, boolean bitrateWarningReaded, int announce, double skipRatio, boolean vcStatus, boolean forceToEndQue) {
         this.manager = manager;
         try {
             this.textId = Long.parseLong(textId);
@@ -66,9 +68,11 @@ public class Settings implements GuildSettingsProvider {
         this.bitrateWarningReaded = bitrateWarningReaded;
         this.announce = announce;
         this.skipRatio = skipRatio;
+        this.vcStatus = vcStatus;
+        this.ForceToEndQue = forceToEndQue;
     }
 
-    public Settings(SettingsManager manager, long textId, long voiceId, long roleId, int volume, String defaultPlaylist, RepeatMode repeatMode, String prefix, boolean bitrateWarningReaded, int announce, double skipRatio) {
+    public Settings(SettingsManager manager, long textId, long voiceId, long roleId, int volume, String defaultPlaylist, RepeatMode repeatMode, String prefix, boolean bitrateWarningReaded, int announce, double skipRatio, boolean vcStatus, boolean forceToEndQue) {
         this.manager = manager;
         this.textId = textId;
         this.voiceId = voiceId;
@@ -80,6 +84,8 @@ public class Settings implements GuildSettingsProvider {
         this.bitrateWarningReaded = bitrateWarningReaded;
         this.announce = announce;
         this.skipRatio = skipRatio;
+        this.vcStatus = vcStatus;
+        this.ForceToEndQue = forceToEndQue;
     }
 
     // Getters
@@ -149,6 +155,15 @@ public class Settings implements GuildSettingsProvider {
         this.manager.writeSettings();
     }
 
+    public boolean getVCStatus() {
+        return vcStatus;
+    }
+
+    public void setVCStatus(boolean vcStatus) {
+        this.vcStatus = vcStatus;
+        this.manager.writeSettings();
+    }
+
     public boolean isBitrateWarningReaded() {
         return bitrateWarningReaded;
     }
@@ -176,5 +191,14 @@ public class Settings implements GuildSettingsProvider {
     public void setDJRole(Role role) {
         this.roleId = role == null ? 0 : role.getIdLong();
         this.manager.writeSettings();
+    }
+
+    public void setForceToEndQue(boolean forceToEndQue) {
+        this.ForceToEndQue = forceToEndQue;
+        this.manager.writeSettings();
+    }
+
+    public boolean isForceToEndQue() {
+        return ForceToEndQue;
     }
 }

@@ -4,6 +4,9 @@ import com.jagrosh.jdautilities.command.Command;
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
+import com.jagrosh.jmusicbot.audio.AudioHandler;
+import com.jagrosh.jmusicbot.audio.QueuedTrack;
+import com.jagrosh.jmusicbot.utils.FormatUtil;
 import dev.cosgy.jmusicbot.playlist.MylistLoader;
 import dev.cosgy.jmusicbot.slashcommands.DJCommand;
 import dev.cosgy.jmusicbot.slashcommands.MusicCommand;
@@ -24,14 +27,16 @@ public class MylistCmd extends MusicCommand {
         super(bot);
         this.guildOnly = false;
         this.name = "mylist";
-        this.arguments = "<append|delete|make|all>";
+        this.arguments = "<append|delete|make|all|show>";
         this.help = "自分専用の再生リストを管理";
         this.aliases = bot.getConfig().getAliases(this.name);
         this.children = new MusicCommand[]{
+                new PlayCmd(bot),
                 new MakelistCmd(bot),
                 new DeletelistCmd(bot),
                 new AppendlistCmd(bot),
-                new ListCmd(bot)
+                new ListCmd(bot),
+                new ShowTracksCmd(bot)
         };
     }
 
@@ -48,6 +53,163 @@ public class MylistCmd extends MusicCommand {
     @Override
     public void doCommand(SlashCommandEvent slashCommandEvent) {
     }
+
+    public static class ShowTracksCmd extends MusicCommand {
+        public ShowTracksCmd(Bot bot) {
+            super(bot);
+            this.name = "show";
+            this.help = "指定したマイリスト内の曲を表示";
+            this.arguments = "<name>";
+            this.guildOnly = false;
+            this.ownerCommand = false;
+
+            List<OptionData> options = new ArrayList<>();
+            options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
+            this.options = options;
+        }
+
+        @Override
+        public void doCommand(CommandEvent event) {
+            String userId = event.getAuthor().getId();
+            String playlistName = event.getArgs().trim();
+
+            if (playlistName.isEmpty()) {
+                event.reply(event.getClient().getError() + " プレイリスト名を指定してください。");
+                return;
+            }
+
+            MylistLoader.Playlist playlist = bot.getMylistLoader().getPlaylist(userId, playlistName);
+            if (playlist == null) {
+                event.reply(event.getClient().getError() + " マイリスト `" + playlistName + "` が見つかりませんでした。");
+                return;
+            }
+
+            if (playlist.getTracks().isEmpty()) {
+                event.reply(event.getClient().getWarning() + " マイリスト `" + playlistName + "` に曲がありません。");
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder(event.getClient().getSuccess() + " マイリスト `" + playlistName + "` 内の曲:\n");
+            for (int i = 0; i < playlist.getTracks().size(); i++) {
+                builder.append(i + 1).append(". ").append(playlist.getTracks().get(i).getInfo().title).append("\n");
+            }
+
+            if (builder.length() > 2000) {
+                builder.setLength(1997); // Discordのメッセージ制限を超えないようにする
+                builder.append("...");
+            }
+
+            event.reply(builder.toString());
+        }
+
+        @Override
+        public void doCommand(SlashCommandEvent event) {
+            String userId = event.getUser().getId();
+            String playlistName = event.getOption("name").getAsString();
+
+            MylistLoader.Playlist playlist = bot.getMylistLoader().getPlaylist(userId, playlistName);
+            if (playlist == null) {
+                event.reply(event.getClient().getError() + " マイリスト `" + playlistName + "` が見つかりませんでした。").queue();
+                return;
+            }
+
+            if (playlist.getTracks().isEmpty()) {
+                event.reply(event.getClient().getWarning() + " マイリスト `" + playlistName + "` に曲がありません。").queue();
+                return;
+            }
+
+            StringBuilder builder = new StringBuilder(event.getClient().getSuccess() + " マイリスト `" + playlistName + "` 内の曲:\n");
+            for (int i = 0; i < playlist.getTracks().size(); i++) {
+                builder.append(i + 1).append(". ").append(playlist.getTracks().get(i).getInfo().title).append("\n");
+            }
+
+            if (builder.length() > 2000) {
+                builder.setLength(1997); // Discordのメッセージ制限を超えないようにする
+                builder.append("...");
+            }
+
+            event.reply(builder.toString()).queue();
+        }
+    }
+
+
+    public class PlayCmd extends MusicCommand {
+        public PlayCmd(Bot bot) {
+            super(bot);
+            this.name = "play";
+            this.aliases = new String[]{"pl"};
+            this.arguments = "<name>";
+            this.help = "マイリストを再生します";
+            this.beListening = true;
+            this.bePlaying = false;
+
+            List<OptionData> options = new ArrayList<>();
+            options.add(new OptionData(OptionType.STRING, "name", "マイリスト名", true));
+            this.options = options;
+        }
+
+        @Override
+        public void doCommand(CommandEvent event) {
+            String userId = event.getAuthor().getId();
+            if (event.getArgs().isEmpty()) {
+                event.reply(event.getClient().getError() + " マイリスト名を含めてください。");
+                return;
+            }
+            MylistLoader.Playlist playlist = bot.getMylistLoader().getPlaylist(userId, event.getArgs());
+            if (playlist == null) {
+                event.replyError("`" + event.getArgs() + ".txt `を見つけられませんでした ");
+                return;
+            }
+            event.getChannel().sendMessage(":calling: マイリスト**" + event.getArgs() + "**を読み込んでいます... (" + playlist.getItems().size() + " 曲)").queue(m ->
+            {
+                AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
+                playlist.loadTracks(bot.getPlayerManager(), (at) -> handler.addTrack(new QueuedTrack(at, event.getAuthor())), () -> {
+                    StringBuilder builder = new StringBuilder(playlist.getTracks().isEmpty()
+                            ? event.getClient().getWarning() + " 楽曲がロードされていません。"
+                            : event.getClient().getSuccess() + "**" + playlist.getTracks().size() + "**曲、読み込みました。");
+                    if (!playlist.getErrors().isEmpty())
+                        builder.append("\n以下の楽曲をロードできませんでした:");
+                    playlist.getErrors().forEach(err -> builder.append("\n`[").append(err.getIndex() + 1)
+                            .append("]` **").append(err.getItem()).append("**: ").append(err.getReason()));
+                    String str = builder.toString();
+                    if (str.length() > 2000)
+                        str = str.substring(0, 1994) + " (以下略)";
+                    m.editMessage(FormatUtil.filter(str)).queue();
+                });
+            });
+        }
+
+        @Override
+        public void doCommand(SlashCommandEvent event) {
+            String userId = event.getUser().getId();
+
+            String name = event.getOption("name").getAsString();
+
+            MylistLoader.Playlist playlist = bot.getMylistLoader().getPlaylist(userId, name);
+            if (playlist == null) {
+                event.reply(event.getClient().getError() + "`" + name + ".txt `を見つけられませんでした ").queue();
+                return;
+            }
+            event.reply(":calling: マイリスト**" + name + "**を読み込んでいます... (" + playlist.getItems().size() + " 曲)").queue(m ->
+            {
+                AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
+                playlist.loadTracks(bot.getPlayerManager(), (at) -> handler.addTrack(new QueuedTrack(at, event.getUser())), () -> {
+                    StringBuilder builder = new StringBuilder(playlist.getTracks().isEmpty()
+                            ? event.getClient().getWarning() + " 楽曲がロードされていません。"
+                            : event.getClient().getSuccess() + "**" + playlist.getTracks().size() + "**曲、読み込みました。");
+                    if (!playlist.getErrors().isEmpty())
+                        builder.append("\n以下の楽曲をロードできませんでした:");
+                    playlist.getErrors().forEach(err -> builder.append("\n`[").append(err.getIndex() + 1)
+                            .append("]` **").append(err.getItem()).append("**: ").append(err.getReason()));
+                    String str = builder.toString();
+                    if (str.length() > 2000)
+                        str = str.substring(0, 1994) + " (以下略)";
+                    m.editOriginal(FormatUtil.filter(str)).queue();
+                });
+            });
+        }
+    }
+
 
     public static class MakelistCmd extends DJCommand {
         public MakelistCmd(Bot bot) {

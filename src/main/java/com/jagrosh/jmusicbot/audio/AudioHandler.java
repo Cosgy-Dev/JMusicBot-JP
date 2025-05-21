@@ -77,15 +77,18 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         if (audioPlayer.getPlayingTrack() == null) {
             audioPlayer.playTrack(qtrack.getTrack());
             return -1;
-        } else
-            return queue.add(qtrack);
+        } else {
+            boolean toEnt = manager.getBot().getSettingsManager().getSettings(guildId).isForceToEndQue();
+            return queue.add(qtrack, toEnt);
+        }
     }
 
     public void addTrackIfRepeat(AudioTrack track) {
         // リピートモードの場合は、キューの最後にトラックを追加します
         RepeatMode mode = manager.getBot().getSettingsManager().getSettings(guildId).getRepeatMode();
+        boolean toEnt = manager.getBot().getSettingsManager().getSettings(guildId).isForceToEndQue();
         if (mode != RepeatMode.OFF) {
-            queue.add(new QueuedTrack(track.makeClone(), track.getUserData(RequestMetadata.class)));
+            queue.add(new QueuedTrack(track.makeClone(), track.getUserData(RequestMetadata.class)), toEnt);
         }
     }
 
@@ -203,9 +206,9 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
                 if (rm.getOwner() != 0L) {
                     User u = guild.getJDA().getUserById(rm.user.id);
                     if (u == null)
-                        eb.setAuthor(rm.user.username + "#" + rm.user.discrim, null, rm.user.avatar);
+                        eb.setAuthor(rm.user.username, null, rm.user.avatar);
                     else
-                        eb.setAuthor(u.getName() + "#" + u.getDiscriminator(), null, u.getEffectiveAvatarUrl());
+                        eb.setAuthor(u.getName(), null, u.getEffectiveAvatarUrl());
                 }
                 try {
                     eb.setTitle(track.getInfo().title, track.getInfo().uri);
@@ -230,9 +233,9 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
                 if (rm.getOwner() != 0L) {
                     User u = guild.getJDA().getUserById(rm.user.id);
                     if (u == null)
-                        eb.setAuthor(rm.user.username + "#" + rm.user.discrim, null, rm.user.avatar);
+                        eb.setAuthor(rm.user.username, null, rm.user.avatar);
                     else
-                        eb.setAuthor(u.getName() + "#" + u.getDiscriminator(), null, u.getEffectiveAvatarUrl());
+                        eb.setAuthor(u.getName(), null, u.getEffectiveAvatarUrl());
                 }
                 try {
                     eb.setTitle(track.getInfo().title, track.getInfo().uri);
