@@ -48,6 +48,7 @@ import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -60,8 +61,8 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author John Grosh <john.a.grosh@gmail.com>
  */
 public class PlayCmd extends MusicCommand {
-    private final static String LOAD = "\uD83D\uDCE5"; // 📥
-    private final static String CANCEL = "\uD83D\uDEAB"; // 🚫
+    private final static String LOAD = "\uD83D\uDCE5 追加";    // 📥
+    private final static String CANCEL = "\uD83D\uDEAB キャンセル";  // 🚫
 
     private final String loadingEmoji;
 
@@ -272,41 +273,57 @@ public class PlayCmd extends MusicCommand {
         }
 
         private void loadSingle(AudioTrack track, AudioPlaylist playlist) {
+            // too-long checks remain the same
             if (bot.getConfig().isTooLong(track)) {
                 m.editOriginal(FormatUtil.filter(event.getClient().getWarning() +
-                        " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title) + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。")).queue();
+                                " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
+                                + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。"))
+                        .queue();
                 return;
             }
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrack(new QueuedTrack(track, event.getUser())) + 1;
 
-            // Output MSG ex:
-            // <タイトル><(長さ)> を追加しました。
-            // <タイトル><(長さ)> を再生待ちの<再生待ち番号>番目に追加しました。
             String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
-            if (playlist == null || !event.getGuild().getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_ADD_REACTION)) {
+
+            // If there is no playlist or we cannot send buttons, simply edit the message
+            if (playlist == null || !event.getGuild().getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_SEND)) {
                 m.editOriginal(addMsg).queue();
             } else {
-                new ButtonMenu.Builder()
-                        .setText(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setChoices(LOAD, CANCEL)
-                        .setEventWaiter(bot.getWaiter())
-                        .setTimeout(30, TimeUnit.SECONDS)
-                        .setAction(re ->
-                        {
-                            if (re.getName().equals(LOAD))
-                                m.editOriginal(addMsg + "\n" + event.getClient().getSuccess() + "**" + loadPlaylist(playlist, track) + "**曲を再生待ちに追加しました!").queue();
-                            else
-                                m.editOriginal(addMsg).queue();
-                        }).setFinalAction(m ->
-                        {
-                            try {
-                                m.clearReactions().queue();
-                                m.delete().queue();
-                            } catch (PermissionException ignore) {
+                // build buttons with unique IDs so multiple interactions do not conflict
+                String unique = Long.toHexString(System.currentTimeMillis());
+                String loadId = "play:load:" + unique;
+                String cancelId = "play:cancel:" + unique;
+
+                Button loadButton = Button.primary(loadId, LOAD);
+                Button cancelButton = Button.danger(cancelId, CANCEL);
+
+                m.editOriginal(addMsg + "\n" + event.getClient().getWarning()
+                                + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
+                        .setActionRow(loadButton, cancelButton)
+                        .queue();
+
+                // wait for button click or timeout
+                bot.getWaiter().waitForEvent(ButtonInteractionEvent.class,
+                        (e) -> e.getComponentId().equals(loadId) || e.getComponentId().equals(cancelId),
+                        (e) -> {
+                            // always defer the edit so the user doesn't see "interaction failed"
+                            e.deferEdit().queue();
+                            if (e.getComponentId().equals(loadId)) {
+                                int count = loadPlaylist(playlist, track);
+                                m.editOriginal(addMsg + "\n" + event.getClient().getSuccess()
+                                                + "**" + count + "**曲を再生待ちに追加しました!")
+                                        .setComponents()
+                                        .queue();
+                            } else {
+                                m.editOriginal(addMsg)
+                                        .setComponents()
+                                        .queue();
                             }
-                        }).build().display(event.getChannel());
+                        },
+                        30, TimeUnit.SECONDS,
+                        () -> m.editOriginal(addMsg).setComponents().queue());
             }
         }
 
@@ -383,38 +400,48 @@ public class PlayCmd extends MusicCommand {
         private void loadSingle(AudioTrack track, AudioPlaylist playlist) {
             if (bot.getConfig().isTooLong(track)) {
                 m.editMessage(FormatUtil.filter(event.getClient().getWarning() +
-                        " **" + track.getInfo().title + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。")).queue();
+                                " **" + track.getInfo().title + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。"))
+                        .queue();
                 return;
             }
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrack(new QueuedTrack(track, event.getAuthor())) + 1;
-
-            // Output MSG ex:
-            // <タイトル><(長さ)> を追加しました。
-            // <タイトル><(長さ)> を再生待ちの<再生待ち番号>番目に追加しました。
             String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
-            if (playlist == null || !event.getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_ADD_REACTION))
+
+            // If no playlist or cannot send components, just edit the message
+            if (playlist == null || !event.getSelfMember().hasPermission(event.getTextChannel(), Permission.MESSAGE_SEND)) {
                 m.editMessage(addMsg).queue();
-            else {
-                new ButtonMenu.Builder()
-                        .setText(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setChoices(LOAD, CANCEL)
-                        .setEventWaiter(bot.getWaiter())
-                        .setTimeout(30, TimeUnit.SECONDS)
-                        .setAction(re ->
-                        {
-                            if (re.getName().equals(LOAD))
-                                m.editMessage(addMsg + "\n" + event.getClient().getSuccess() + "**" + loadPlaylist(playlist, track) + "**曲を再生待ちに追加しました!").queue();
-                            else
-                                m.editMessage(addMsg).queue();
-                        }).setFinalAction(m ->
-                        {
-                            try {
-                                m.clearReactions().queue();
-                            } catch (PermissionException ignore) {
+            } else {
+                // unique IDs for this interaction
+                String unique = Long.toHexString(System.currentTimeMillis());
+                String loadId = "play:load:" + unique;
+                String cancelId = "play:cancel:" + unique;
+                Button loadButton = Button.primary(loadId, LOAD);
+                Button cancelButton = Button.danger(cancelId, CANCEL);
+
+                m.editMessage(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size()
+                                + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
+                        .setActionRow(loadButton, cancelButton)
+                        .queue();
+                // wait for a button click
+                bot.getWaiter().waitForEvent(ButtonInteractionEvent.class,
+                        (e) -> e.getComponentId().equals(loadId) || e.getComponentId().equals(cancelId),
+                        (e) -> {
+                            e.deferEdit().queue();
+                            if (e.getComponentId().equals(loadId)) {
+                                int count = loadPlaylist(playlist, track);
+                                m.editMessage(addMsg + "\n" + event.getClient().getSuccess() + "**" + count + "**曲を再生待ちに追加しました!")
+                                        .setComponents()
+                                        .queue();
+                            } else {
+                                m.editMessage(addMsg)
+                                        .setComponents()
+                                        .queue();
                             }
-                        }).build().display(m);
+                        },
+                        30, TimeUnit.SECONDS,
+                        () -> m.editMessage(addMsg).setComponents().queue());
             }
         }
 
