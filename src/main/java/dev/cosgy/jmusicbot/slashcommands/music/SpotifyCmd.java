@@ -138,20 +138,8 @@ public class SpotifyCmd extends MusicCommand {
             String artistName = json.getJSONArray("artists").getJSONObject(0).getString("name");
             String albumImageUrl = json.getJSONObject("album").getJSONArray("images").getJSONObject(0).getString("url");
 
-            // Audio Features エンドポイントを使用して曲の情報を取得
-            endpoint = "https://api.spotify.com/v1/audio-features/" + trackId;
-            request = HttpRequest.newBuilder()
-                    .header("Authorization", "Bearer "+ accessToken)
-                    .GET()
-                    .uri(URI.create(endpoint))
-                    .build();
 
-            response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-            json = new JSONObject(response.body());
-            double trackColor = json.getDouble("valence");
-
-            int hue = (int) (trackColor * 360);
-            Color color = Color.getHSBColor((float) hue / 360, 1.0f, 1.0f);
+            Color color = new Color(30, 215, 96);
 
             EmbedBuilder embed = new EmbedBuilder();
             embed.setTitle("Track Information");
