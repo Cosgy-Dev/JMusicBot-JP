@@ -1,50 +1,29 @@
-/*
- * Copyright 2018 John Grosh (jagrosh).
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
 import com.jagrosh.jdautilities.command.CommandEvent;
 import com.jagrosh.jdautilities.command.SlashCommandEvent;
-import com.jagrosh.jdautilities.menu.Paginator;
 import com.jagrosh.jmusicbot.Bot;
-import com.jagrosh.jmusicbot.JMusicBot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.QueuedTrack;
 import com.jagrosh.jmusicbot.settings.Settings;
-import com.jagrosh.jmusicbot.utils.FormatUtil;
 import dev.cosgy.jmusicbot.settings.RepeatMode;
 import dev.cosgy.jmusicbot.slashcommands.MusicCommand;
+import dev.cosgy.jmusicbot.util.QueuePaginatorManager;
 import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.exceptions.PermissionException;
-import net.dv8tion.jda.api.interactions.InteractionHook;
+import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.api.utils.messages.MessageEditBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageEditData;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 /**
- * @author John Grosh <john.a.grosh@gmail.com>
+ * 再生中・キュー中の楽曲情報をページ表示するコマンド。
  */
 public class QueueCmd extends MusicCommand {
-    private final static String REPEAT_ALL = "\uD83D\uDD01"; // 🔁
-    private final static String REPEAT_SINGLE = "\uD83D\uDD02"; // 🔂
-
-    private final Paginator.Builder builder;
+    private static final String REPEAT_ALL = "\uD83D\uDD01";   // 🔁
+    private static final String REPEAT_SINGLE = "\uD83D\uDD02"; // 🔂
 
     public QueueCmd(Bot bot) {
         super(bot);
@@ -53,117 +32,120 @@ public class QueueCmd extends MusicCommand {
         this.arguments = "[ページ]";
         this.aliases = bot.getConfig().getAliases(this.name);
         this.bePlaying = true;
-        this.botPermissions = new Permission[]{Permission.MESSAGE_ADD_REACTION, Permission.MESSAGE_EMBED_LINKS};
-        builder = new Paginator.Builder()
-                .setColumns(1)
-                .setFinalAction(m -> {
-                    try {
-                        m.clearReactions().queue();
-                    } catch (PermissionException ignore) {
-                    }
-                })
-                .setItemsPerPage(10)
-                .waitOnSinglePage(false)
-                .useNumberedItems(true)
-                .showPageNumbers(true)
-                .wrapPageEnds(true)
-                .setEventWaiter(bot.getWaiter())
-                .setTimeout(1, TimeUnit.MINUTES);
+        // ボットに必要な権限（メッセージ埋め込みの許可が必要。リアクションは不要）
+        this.botPermissions = new Permission[]{Permission.MESSAGE_EMBED_LINKS};
     }
 
     @Override
     public void doCommand(CommandEvent event) {
-        int pagenum = 1;
+        // 引数からページ番号を取得（指定なしの場合は1ページ目）
+        int page = 1;
         try {
-            pagenum = Integer.parseInt(event.getArgs());
-        } catch (NumberFormatException ignore) {
+            page = Integer.parseInt(event.getArgs().trim());
+        } catch (NumberFormatException ignored) {
         }
+
         AudioHandler ah = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
-        List<QueuedTrack> list = ah.getQueue().getList();
-        if (list.isEmpty()) {
-            MessageCreateData nowp = null;
+        List<QueuedTrack> queue = ah.getQueue().getList();
+        if (queue.isEmpty()) {
+            // キューに楽曲がない場合、現在再生中の曲情報を表示して終了
+            MessageCreateData nowPlayingData;
             try {
-                nowp = ah.getNowPlaying(event.getJDA());
+                nowPlayingData = ah.getNowPlaying(event.getJDA());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            MessageCreateData nonowp = ah.getNoMusicPlaying(event.getJDA());
-            MessageCreateData built = new MessageCreateBuilder()
+            MessageCreateData noMusicData = ah.getNoMusicPlaying(event.getJDA());
+            MessageCreateData response = new MessageCreateBuilder()
                     .setContent(event.getClient().getWarning() + " 再生待ちの楽曲はありません。")
-                    .setEmbeds((nowp == null ? nonowp : nowp).getEmbeds().get(0)).build();
-            MessageCreateData finalNowp = nowp;
-            event.reply(built, m ->
-            {
-                if (finalNowp != null)
+                    .setEmbeds((nowPlayingData == null ? noMusicData : nowPlayingData).getEmbeds().get(0))
+                    .build();
+            event.reply(response, m -> {
+                // NowPlayingHandlerに最後の再生メッセージとして登録（現在曲の自動更新用）
+                if (nowPlayingData != null) {
                     bot.getNowplayingHandler().setLastNPMessage(m);
+                }
             });
             return;
         }
-        String[] songs = new String[list.size()];
-        long total = 0;
-        for (int i = 0; i < list.size(); i++) {
-            total += list.get(i).getTrack().getDuration();
-            songs[i] = list.get(i).toString();
-        }
-        Settings settings = event.getClient().getSettingsFor(event.getGuild());
-        long finTotal = total;
-        builder.setText((i1, i2) -> getQueueTitle(ah, event.getClient().getSuccess(), songs.length, finTotal, settings.getRepeatMode()))
-                .setItems(songs)
-                .setUsers(event.getAuthor())
-                .setColor(event.getSelfMember().getColor());
 
-        builder.build().paginate(event.getChannel(), pagenum);
+        // 総楽曲数および総再生時間を計算
+        long totalDuration = 0;
+        for (QueuedTrack qt : queue) {
+            totalDuration += qt.getTrack().getDuration();
+        }
+        int totalPages = (int) Math.ceil(queue.size() / 10.0);
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+
+        // ページ番号に対応するEmbedを生成
+        Settings settings = event.getClient().getSettingsFor(event.getGuild());
+        RepeatMode repeatMode = settings.getRepeatMode();
+        // QueuePaginatorManager を使用して現在ページのEmbedを取得
+        // （QueuePaginatorManager側で現在再生中の曲情報やエントリー数、総時間、繰り返しモードの表示を行う）
+        net.dv8tion.jda.api.entities.MessageEmbed queueEmbed = QueuePaginatorManager.createQueuePageEmbed(
+                ah, queue, event.getClient().getSuccess(), repeatMode, page, totalPages);
+
+        // ページ切り替え用ボタンの作成（ユーザー限定のカスタムIDを付与）
+        String userId = event.getAuthor().getId();
+        Button btnPrev = Button.secondary("queue:prev:" + userId, "⏮ 前へ");
+        Button btnNext = Button.secondary("queue:next:" + userId, "⏭ 次へ");
+        Button btnClose = Button.danger("queue:close:" + userId, "❌ 閉じる");
+
+        // Embedとボタンをチャンネルに送信
+        event.getChannel().sendMessageEmbeds(queueEmbed)
+                .setActionRow(btnPrev, btnNext, btnClose)
+                .queue();
     }
 
     @Override
     public void doCommand(SlashCommandEvent event) {
-        InteractionHook m = event.reply("再生待ちを取得しています。").complete();
-        int pagenum = 1;
+        // スラッシュコマンドの場合、まず応答を遅延させて思考中表示
+        event.deferReply().queue();
+
+        int page = 1;
         AudioHandler ah = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
-        List<QueuedTrack> list = ah.getQueue().getList();
-        if (list.isEmpty()) {
-            MessageCreateData nowp = null;
+        List<QueuedTrack> queue = ah.getQueue().getList();
+        if (queue.isEmpty()) {
+            // キューに楽曲がない場合、現在再生中の曲情報を表示して終了
+            MessageCreateData nowPlayingData;
             try {
-                nowp = ah.getNowPlaying(event.getJDA());
+                nowPlayingData = ah.getNowPlaying(event.getJDA());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
-            MessageCreateData nonowp = ah.getNoMusicPlaying(event.getJDA());
-            MessageEditData built = new MessageEditBuilder()
+            MessageCreateData noMusicData = ah.getNoMusicPlaying(event.getJDA());
+            MessageEditData response = new MessageEditBuilder()
                     .setContent(event.getClient().getWarning() + " 再生待ちの楽曲はありません。")
-                    .setEmbeds((nowp == null ? nonowp : nowp).getEmbeds().get(0)).build();
-            m.editOriginal(built).queue();
+                    .setEmbeds((nowPlayingData == null ? noMusicData : nowPlayingData).getEmbeds().get(0))
+                    .build();
+            event.getHook().editOriginal(response).queue();
             return;
         }
-        String[] songs = new String[list.size()];
-        long total = 0;
-        for (int i = 0; i < list.size(); i++) {
-            total += list.get(i).getTrack().getDuration();
-            songs[i] = list.get(i).toString();
-        }
-        Settings settings = event.getClient().getSettingsFor(event.getGuild());
-        long finTotal = total;
-        builder.setText((i1, i2) -> getQueueTitle(ah, event.getClient().getSuccess(), songs.length, finTotal, settings.getRepeatMode()))
-                .setItems(songs)
-                .setUsers(event.getUser())
-                .setColor(event.getGuild().getSelfMember().getColor());
-        builder.build().paginate(event.getChannel(), pagenum);
-        m.deleteOriginal().queue();
-    }
 
-    private String getQueueTitle(AudioHandler ah, String success, int songslength, long total, RepeatMode repeatmode) {
-        StringBuilder sb = new StringBuilder();
-        if (ah.getPlayer().getPlayingTrack() != null) {
-            sb.append(ah.getPlayer().isPaused() ? JMusicBot.PAUSE_EMOJI : JMusicBot.PLAY_EMOJI).append(" **")
-                    .append(
-                            ah.getPlayer().getPlayingTrack().getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" :
-                                    ah.getPlayer().getPlayingTrack().getInfo().title).append("**\n");
+        // 総楽曲数および総再生時間を計算
+        long totalDuration = 0;
+        for (QueuedTrack qt : queue) {
+            totalDuration += qt.getTrack().getDuration();
         }
-        return FormatUtil.filter(sb.append(success).append(" 再生待ち楽曲一覧 | ").append(songslength)
-                .append(" エントリー | `").append(FormatUtil.formatTime(total)).append("` ")
-                // RepeatMode.OFF - ""
-                // RepeatMode.ALL - QueueCmd.REPEAT_ALL
-                // RepeatMode.SINGLE = QueueCmd.REPEAT_SINGLE
-                .append(repeatmode != RepeatMode.OFF ? "| " + (repeatmode == RepeatMode.ALL ? REPEAT_ALL : REPEAT_SINGLE) : "").toString());
+        int totalPages = (int) Math.ceil(queue.size() / 10.0);
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+
+        Settings settings = event.getClient().getSettingsFor(event.getGuild());
+        RepeatMode repeatMode = settings.getRepeatMode();
+        net.dv8tion.jda.api.entities.MessageEmbed queueEmbed = QueuePaginatorManager.createQueuePageEmbed(
+                ah, queue, event.getClient().getSuccess(), repeatMode, page, totalPages);
+
+        // ページ切り替え用ボタン（カスタムIDにユーザーIDを含める）
+        String userId = event.getUser().getId();
+        Button btnPrev = Button.secondary("queue:prev:" + userId, "⏮ 前へ");
+        Button btnNext = Button.secondary("queue:next:" + userId, "⏭ 次へ");
+        Button btnClose = Button.danger("queue:close:" + userId, "❌ 閉じる");
+
+        // Embedとボタンを初期応答に設定
+        event.getHook().editOriginalEmbeds(queueEmbed)
+                .setActionRow(btnPrev, btnNext, btnClose)
+                .queue();
     }
 }

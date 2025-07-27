@@ -29,6 +29,7 @@ import dev.cosgy.jmusicbot.slashcommands.admin.*;
 import dev.cosgy.jmusicbot.slashcommands.dj.*;
 import dev.cosgy.jmusicbot.slashcommands.general.*;
 import dev.cosgy.jmusicbot.slashcommands.listeners.CommandAudit;
+import dev.cosgy.jmusicbot.slashcommands.listeners.buttons.QueueButtonListener;
 import dev.cosgy.jmusicbot.slashcommands.music.*;
 import dev.cosgy.jmusicbot.slashcommands.owner.*;
 import net.dv8tion.jda.api.JDA;
@@ -270,7 +271,7 @@ public class JMusicBot {
                     .setActivity(nogame ? null : Activity.playing("ロード中..."))
                     .setStatus(config.getStatus() == OnlineStatus.INVISIBLE || config.getStatus() == OnlineStatus.OFFLINE
                             ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB)
-                    .addEventListeners(cb.build(), waiter, new Listener(bot))
+                    .addEventListeners(cb.build(), waiter, new Listener(bot),new QueueButtonListener(bot))
                     .setBulkDeleteSplittingEnabled(true)
                     .build();
             bot.setJDA(jda);
