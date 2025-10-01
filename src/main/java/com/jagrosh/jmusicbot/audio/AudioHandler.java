@@ -56,6 +56,15 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     private final String stringGuildId;
     private AudioFrame lastFrame;
 
+    // フィールドに追加
+    private final java.util.concurrent.atomic.AtomicBoolean suppressAutoLeaveOnce = new java.util.concurrent.atomic.AtomicBoolean(false);
+
+    // 外部から呼ぶためのメソッド
+    public void suppressAutoLeaveOnce() {
+        suppressAutoLeaveOnce.set(true);
+    }
+
+
     protected AudioHandler(PlayerManager manager, Guild guild, AudioPlayer player) {
         this.manager = manager;
         this.audioPlayer = player;
@@ -152,6 +161,10 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     // Audio Events
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
+        if (endReason == AudioTrackEndReason.REPLACED || suppressAutoLeaveOnce.getAndSet(false)) {
+            return;
+        }
+
         RepeatMode repeatMode = manager.getBot().getSettingsManager().getSettings(guildId).getRepeatMode();
 
         // もしも楽曲再生が通常通り終了し、リピートモードが有効(!OFF)ならばキューに再追加する
