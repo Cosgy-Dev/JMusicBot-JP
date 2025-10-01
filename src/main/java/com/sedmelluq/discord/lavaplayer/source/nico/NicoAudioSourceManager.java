@@ -38,6 +38,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -73,8 +74,9 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
      */
     public NicoAudioSourceManager(String email, String password) {
         try {
-            Path botDir = Paths.get("").toAbsolutePath(); // ボットのルート
-            ytDlpPath = new YtDlpManager(botDir).prepare();
+            YtDlpManager y = new YtDlpManager(Paths.get("").toAbsolutePath());
+            ytDlpPath = y.prepare();
+            y.startAutoUpdate(Duration.ofHours(6));
 
         } catch (Exception e) {
             log.error("yt-dlp の準備に失敗しました", e);
