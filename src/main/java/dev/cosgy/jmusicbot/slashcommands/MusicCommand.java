@@ -47,7 +47,7 @@ public abstract class MusicCommand extends SlashCommand {
 
     public MusicCommand(Bot bot) {
         this.bot = bot;
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.category = new Category("Music");
     }
 

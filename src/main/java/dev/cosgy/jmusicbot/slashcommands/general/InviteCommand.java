@@ -9,7 +9,7 @@ public class InviteCommand extends SlashCommand {
     public InviteCommand() {
         this.name = "invite";
         this.help = "Botの招待用URLを表示します。";
-        this.guildOnly = false;
+        //this.guildOnly = false;
         this.aliases = new String[]{"share"};
     }
 

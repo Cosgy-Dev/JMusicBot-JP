@@ -34,7 +34,7 @@ public class AutoplaylistCmd extends AdminCommand {
 
     public AutoplaylistCmd(Bot bot) {
         this.bot = bot;
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.name = "autoplaylist";
         this.arguments = "<name|NONE|なし>";
         this.aliases = bot.getConfig().getAliases(this.name);

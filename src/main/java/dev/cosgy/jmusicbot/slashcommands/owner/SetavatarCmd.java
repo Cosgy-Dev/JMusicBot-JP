@@ -38,7 +38,7 @@ public class SetavatarCmd extends OwnerCommand {
         this.help = "ボットのアバターを設定します";
         this.arguments = "<url>";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         List<OptionData> options = new ArrayList<>();
         options.add(new OptionData(OptionType.STRING, "image", "画像のURL", true));
         this.options = options;

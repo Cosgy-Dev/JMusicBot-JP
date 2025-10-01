@@ -13,7 +13,7 @@ public class ServerInfo extends SlashCommand {
     public ServerInfo(Bot bot) {
         this.name = "serverinfo";
         this.help = "サーバーに関する情報を表示します";
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.category = new Category("General");
         this.aliases = bot.getConfig().getAliases(this.name);
     }

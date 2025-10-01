@@ -35,7 +35,7 @@ public class SetgameCmd extends OwnerCommand {
         this.help = "ボットがプレイしているゲームを設定します";
         this.arguments = "[action] [game]";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         this.children = new OwnerCommand[]{
                 new PlayingCmd(),
                 new SetlistenCmd(),
@@ -67,7 +67,7 @@ public class SetgameCmd extends OwnerCommand {
             this.name = "none";
             this.aliases = new String[]{"none"};
             this.help = "ステータスをリセットします。";
-            this.guildOnly = false;
+            //this.guildOnly = false;
         }
 
         @Override
@@ -89,7 +89,7 @@ public class SetgameCmd extends OwnerCommand {
             this.aliases = new String[]{"twitch", "streaming"};
             this.help = "ボットがプレイしているゲームを設定します。";
             this.arguments = "<title>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "title", "ゲームのタイトル", true));
             this.options = options;
@@ -118,7 +118,7 @@ public class SetgameCmd extends OwnerCommand {
             this.aliases = new String[]{"twitch", "streaming"};
             this.help = "ボットがプレイしているゲームをストリームに設定します。";
             this.arguments = "<username> <game>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "user", "ユーザー名", true));
             options.add(new OptionData(OptionType.STRING, "game", "ゲームのタイトル", true));
@@ -159,7 +159,7 @@ public class SetgameCmd extends OwnerCommand {
             this.aliases = new String[]{"listening"};
             this.help = "ボットが聞いているゲームを設定します";
             this.arguments = "<title>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "title", "タイトル", true));
             this.options = options;
@@ -198,7 +198,7 @@ public class SetgameCmd extends OwnerCommand {
             this.aliases = new String[]{"watching"};
             this.help = "ボットが見ているゲームを設定します";
             this.arguments = "<title>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "title", "タイトル", true));
             this.options = options;
@@ -236,7 +236,7 @@ public class SetgameCmd extends OwnerCommand {
             this.name = "competing";
             this.help = "ボットが参戦しているゲームを設定します";
             this.arguments = "<title>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "title", "ゲームタイトル", true));
             this.options = options;

@@ -102,29 +102,6 @@ public class JMusicBot {
         if (!System.getProperty("java.vm.name").contains("64"))
             prompt.alert(Prompt.Level.WARNING, "Java Version", "サポートされていないJavaバージョンを使用しています。64ビット版のJavaを使用してください。");
 
-        try {
-            Process checkPython3 = Runtime.getRuntime().exec("python3 --version");
-            int python3ExitCode = checkPython3.waitFor();
-
-            if (python3ExitCode != 0) {
-                log.info("Python3 is not installed. Checking for python.");
-                Process checkPython = Runtime.getRuntime().exec("python --version");
-                BufferedReader reader = new BufferedReader(new InputStreamReader(checkPython.getInputStream()));
-                String pythonVersion = reader.readLine();
-                int pythonExitCode = checkPython.waitFor();
-
-                if (pythonExitCode == 0 && pythonVersion != null && pythonVersion.startsWith("Python 3")) {
-                    log.info("Python is version 3.x.");
-                } else {
-                    prompt.alert(Prompt.Level.WARNING, "Python", "Python (バージョン3.x)がインストールされていません。Python 3をインストールしてください。");
-                }
-            } else {
-                log.info("Python3 is installed.");
-            }
-        } catch (Exception e) {
-            prompt.alert(Prompt.Level.WARNING, "Python", "Pythonのバージョン確認中にエラーが発生しました。Python3がインストールされているか確認してください。");
-        }
-
 
 
         // load config

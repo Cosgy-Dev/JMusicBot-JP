@@ -30,7 +30,7 @@ public abstract class AdminCommand extends SlashCommand {
                 return true;
             return event.getMember().hasPermission(Permission.MANAGE_SERVER);
         });
-        this.guildOnly = true;
+        //this.guildOnly = true;
     }
 
     public static boolean checkAdminPermission(CommandClient client, SlashCommandEvent event) {

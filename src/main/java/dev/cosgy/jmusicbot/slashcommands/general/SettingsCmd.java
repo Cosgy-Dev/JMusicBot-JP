@@ -40,7 +40,7 @@ public class SettingsCmd extends SlashCommand {
         this.name = "settings";
         this.help = "Botの設定を表示します";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = true;
+        //this.guildOnly = true;
     }
 
     @Override

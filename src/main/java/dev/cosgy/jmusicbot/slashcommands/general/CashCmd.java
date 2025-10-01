@@ -26,7 +26,7 @@ public class CashCmd extends SlashCommand {
         this.bot = bot;
         this.name = "cache";
         this.help = "キャッシュに保存されている曲を表示します。";
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.category = new Category("General");
         this.aliases = bot.getConfig().getAliases(this.name);
         this.children = new SlashCommand[]{new DeleteCmd(bot), new ShowCmd(bot)};
@@ -95,7 +95,7 @@ public class CashCmd extends SlashCommand {
             this.name = "delete";
             this.aliases = new String[]{"dl", "clear"};
             this.help = "保存されているキャッシュを削除します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
 
         @Override
@@ -139,7 +139,7 @@ public class CashCmd extends SlashCommand {
         public ShowCmd(Bot bot) {
             this.name = "show";
             this.help = "キャッシュされている楽曲を一覧表示します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.botPermissions = new Permission[]{Permission.MESSAGE_ADD_REACTION, Permission.MESSAGE_EMBED_LINKS};
             builder = new Paginator.Builder()
                     .setColumns(1)

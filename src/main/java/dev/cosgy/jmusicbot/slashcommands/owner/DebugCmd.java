@@ -23,7 +23,7 @@ public class DebugCmd extends OwnerCommand {
         this.name = "debug";
         this.help = "デバッグ情報を表示します";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
     }
 
     @Override

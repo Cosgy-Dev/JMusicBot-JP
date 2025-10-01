@@ -16,6 +16,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioItem;
 import com.sedmelluq.discord.lavaplayer.track.AudioReference;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
+import dev.cosgy.jmusicbot.util.YtDlpManager;
 import org.apache.http.Header;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
@@ -35,6 +36,8 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -58,6 +61,7 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
     public static String userName = null;
     public static String password = null;
     public static String twofactor = null;
+    public static Path ytDlpPath = null;
 
     public NicoAudioSourceManager() {
         this(null, null);
@@ -68,7 +72,13 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
      * @param password Site account password
      */
     public NicoAudioSourceManager(String email, String password) {
-        updateYtDlp();
+        try {
+            Path botDir = Paths.get("").toAbsolutePath(); // ボットのルート
+            ytDlpPath = new YtDlpManager(botDir).prepare();
+
+        } catch (Exception e) {
+            log.error("yt-dlp の準備に失敗しました", e);
+        }
 
         File cacheDir = new File("cache");
         if (!cacheDir.exists()) {
@@ -91,59 +101,6 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
 
     private static String getWatchUrl(String videoId) {
         return "https://www.nicovideo.jp/watch/" + videoId;
-    }
-
-    /**
-     * This method attempts to update the <code>`yt-dlp`</code> Python package on the system.
-     * <p>
-     * The process involves checking whether Python 3 is available by first trying
-     * to execute the <code>`python3 --version`</code> command. If `python3` is not found,
-     * the method checks if the `python` command corresponds to Python version 3.x.
-     * <p>
-     * If a suitable Python 3 interpreter is found, the method then attempts to
-     * update `yt-dlp` using the command <code>`python3 -m pip install -U --pre yt-dlp`</code>
-     * or <code>`python -m pip install -U --pre yt-dlp`</code>, depending on which interpreter
-     * is available.
-     * <p>
-     * If neither `python3` nor `python` corresponds to a Python 3.x interpreter,
-     * the method logs an error and aborts the update process.
-     * <p>
-     * In case of any exception during this process, an error is logged, and the user
-     * is prompted to run the appropriate command manually.
-     */
-
-    public void updateYtDlp() {
-        Runtime runtime = Runtime.getRuntime();
-        try {
-            log.info("Checking if python3 is available.");
-            Process checkPython3 = runtime.exec("python3 --version");
-            int python3ExitCode = checkPython3.waitFor();
-
-            String pythonCommand = "python3";
-            if (python3ExitCode != 0) {
-                log.info("python3 not found. Checking if python is Python 3.");
-                Process checkPython = runtime.exec("python --version");
-                BufferedReader reader = new BufferedReader(new InputStreamReader(checkPython.getInputStream()));
-                String pythonVersion = reader.readLine();
-                checkPython.waitFor();
-
-                if (pythonVersion != null && pythonVersion.startsWith("Python 3")) {
-                    log.info("Python is version 3.x.");
-                    pythonCommand = "python";
-                } else {
-                    log.error("Neither python3 nor python version 3.x found. Aborting yt-dlp update.");
-                    return;
-                }
-            }
-
-            log.info("Updating yt-dlp using {}.", pythonCommand);
-            Process process = runtime.exec(pythonCommand + " -m pip install -U --pre yt-dlp");
-            process.waitFor();
-            process.destroy();
-            log.info("yt-dlp update completed.");
-        } catch (Exception e) {
-            log.error("Failed to update yt-dlp. Please run \"python3 -m pip install -U --pre yt-dlp\" or \"python -m pip install -U --pre yt-dlp\" manually to update.");
-        }
     }
 
 

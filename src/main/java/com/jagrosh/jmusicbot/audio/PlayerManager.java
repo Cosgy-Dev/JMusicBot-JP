@@ -47,14 +47,14 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             );
         }
 
-        registerSourceManager(new YoutubeAudioSourceManager(true, new Music(),
+        /*registerSourceManager(new YoutubeAudioSourceManager(true, new Music(),
                 new TvHtml5Embedded(),
                 new AndroidMusic(),
                 new Web(),
                 new WebEmbedded(),
                 new Android(),
-                new Ios()));
-
+                new Ios()));*/
+        registerSourceManager(new YoutubeAudioSourceManager(true));
 
         TransformativeAudioSourceManager.createTransforms(bot.getConfig().getTransforms()).forEach(this::registerSourceManager);
         AudioSourceManagers.registerRemoteSources(this);
