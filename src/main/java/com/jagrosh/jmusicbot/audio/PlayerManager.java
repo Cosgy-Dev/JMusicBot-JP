@@ -75,7 +75,10 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             );
         }
 
-        YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true, new Music(), new TvHtml5Embedded(), new AndroidMusic(), new Web(), new WebEmbedded(), new Android(), new Ios());
+        YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(
+                true,
+                new Music(), new TvHtml5Embedded(), new AndroidMusic(), new Web(), new WebEmbedded(), new Android(), new Ios()
+        );
         yt.setPlaylistPageCount(10);
         yt.useOauth2(null, false);
         registerSourceManager(yt);
@@ -108,7 +111,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             handler = new AudioHandler(this, guild, player);
             player.addListener(handler);
 
-
+            // 再生中例外→フォールバック
             player.addListener(new YtDlpExceptionListener(this, player, handler));
 
             guild.getAudioManager().setSendingHandler(handler);
@@ -143,7 +146,6 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         });
     }
 
-
     boolean shouldFallbackToYtDlp(String identifier) {
         if (ytDlpPath == null || identifier == null) return false;
         String id = identifier.toLowerCase(Locale.ROOT);
@@ -164,7 +166,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             if (out == null || !Files.isRegularFile(out))
                 throw new IllegalStateException("yt-dlp出力が見つかりません: " + out);
 
-            super.loadItemOrdered(orderingKey, out.toUri().toString(), handler);
+            // LocalSource は file:// ではなく絶対パス文字列を期待
+            super.loadItemOrdered(orderingKey, out.toAbsolutePath().toString(), handler);
         } catch (Exception ex) {
             logger.error("yt-dlpフォールバックに失敗: {}", ex.toString());
             if (cause != null) {
@@ -189,19 +192,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
         List<String> cmd = new ArrayList<>();
         cmd.add(ytDlpPath.toString());
-        /*Collections.addAll(cmd,
-                "--no-playlist",
-                "--ignore-config",
-                "--no-progress",
-                "--newline",
-                "--restrict-filenames",
-                "--force-overwrites",
-                "--extract-audio",
-                "--audio-format", "wav",
-                "--output", cacheDir.resolve("%(id)s.%(ext)s").toString(),
-                "--print", "after_move:filepath"
-        );*/
 
+        // 変換なしで Lavaplayer が読める形式を優先（webm/opus → m4a/aac → その他）
         Collections.addAll(cmd,
                 "--no-playlist",
                 "--ignore-config",
@@ -220,6 +212,9 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         ProcessBuilder pb = new ProcessBuilder(cmd);
         pb.directory(botRoot.toFile());
         pb.redirectErrorStream(true);
+        // 日本語パス対応：Python(yt-dlp)の出力を UTF-8 に固定
+        pb.environment().put("PYTHONIOENCODING", "utf-8");
+
         Process proc = pb.start();
 
         String lastNonEmpty = null;
@@ -240,10 +235,11 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         if (lastNonEmpty == null) {
             String id = tryExtractYoutubeId(url);
             if (id == null) throw new IllegalStateException("最終パス不明（printが空）。ID抽出も失敗");
-            Path guess = cacheDir.resolve(id + ".wav");
-            if (Files.isRegularFile(guess)) return guess;
+            // 既知拡張子を探索
             Path guessWebm = cacheDir.resolve(id + ".webm");
             if (Files.isRegularFile(guessWebm)) return guessWebm;
+            Path guessM4a = cacheDir.resolve(id + ".m4a");
+            if (Files.isRegularFile(guessM4a)) return guessM4a;
             throw new FileNotFoundException("出力不明");
         }
 
@@ -284,6 +280,22 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         return null;
     }
 
+    // ======== 置き換え時のメタ引き継ぎ用 ========
+    static final class TrackContext {
+        final AudioTrackInfo originalInfo; // 元のYouTube等のメタ
+        final Object userData;             // RequestMetadata など既存のユーザーデータ
+        TrackContext(AudioTrackInfo info, Object userData) {
+            this.originalInfo = info;
+            this.userData = userData;
+        }
+    }
+
+    // 新しいローカル・トラックへ、元トラックの情報を持たせる
+    void applyReplacementContext(AudioTrack newTrack, AudioTrack oldTrack) {
+        Object ud = oldTrack.getUserData(); // RequestMetadata 等
+        newTrack.setUserData(new TrackContext(oldTrack.getInfo(), ud));
+    }
+
     // ==========================================================
     // 再生中例外 → yt-dlp フォールバック
     // ==========================================================
@@ -307,6 +319,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
             if (track == null || !pm.shouldFallbackToYtDlp(id)) return;
 
+            // 次に来る onTrackEnd を一度だけ抑制（退出防止）
             handler.suppressAutoLeaveOnce();
 
             if (!attempted.add(id)) {
@@ -325,15 +338,19 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
                     pm.loadItemOrdered(handler, out.toAbsolutePath().toString(), new AudioLoadResultHandler() {
                         @Override public void trackLoaded(AudioTrack newTrack) {
+                            // メタ引き継ぎ
+                            pm.applyReplacementContext(newTrack, track);
+                            // stopTrack() は呼ばず置き換え再生（REPLACED）
                             player.startTrack(newTrack, false);
                         }
                         @Override public void playlistLoaded(AudioPlaylist playlist) {
                             AudioTrack t = playlist.getTracks().isEmpty() ? null : playlist.getTracks().get(0);
-                            if (t != null) player.startTrack(t, false);
-                            else noMatches();
+                            if (t != null) {
+                                pm.applyReplacementContext(t, track);
+                                player.startTrack(t, false);
+                            } else noMatches();
                         }
-                        @Override
-                        public void noMatches() {
+                        @Override public void noMatches() {
                             pm.logger.error("ローカル差し替えのロードに失敗（noMatches）: {}", out);
                         }
                         @Override public void loadFailed(FriendlyException e) {
