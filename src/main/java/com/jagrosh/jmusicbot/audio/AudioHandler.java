@@ -97,8 +97,23 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         RepeatMode mode = manager.getBot().getSettingsManager().getSettings(guildId).getRepeatMode();
         boolean toEnt = manager.getBot().getSettingsManager().getSettings(guildId).isForceToEndQue();
         if (mode != RepeatMode.OFF) {
-            queue.add(new QueuedTrack(track.makeClone(), track.getUserData(RequestMetadata.class)), toEnt);
+            AudioTrack cloned = track.makeClone();
+            cloned.setUserData(track.getUserData());
+            queue.add(new QueuedTrack(cloned, extractRequestMetadata(track)), toEnt);
         }
+    }
+
+    private static RequestMetadata extractRequestMetadata(AudioTrack track) {
+        if (track == null) return RequestMetadata.EMPTY;
+        Object ud = track.getUserData();
+        if (ud instanceof RequestMetadata) return (RequestMetadata) ud;
+        if (ud instanceof PlayerManager.TrackContext) {
+            PlayerManager.TrackContext tc = (PlayerManager.TrackContext) ud;
+            if (tc.userData instanceof RequestMetadata) {
+                return (RequestMetadata) tc.userData;
+            }
+        }
+        return RequestMetadata.EMPTY; // NPE防止用のダミー(EMPTY)
     }
 
     public FairQueue<QueuedTrack> getQueue() {
@@ -176,10 +191,15 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
 
         // 完走時のリピート処理
         if (endReason == AudioTrackEndReason.FINISHED && repeatMode != RepeatMode.OFF) {
+            // 元トラックの userData をそのままクローンへ引き継ぐ
+            AudioTrack cloned = track.makeClone();
+            cloned.setUserData(track.getUserData());
+            RequestMetadata rm = extractRequestMetadata(track);
+
             if (repeatMode == RepeatMode.ALL) {
-                queue.add(new QueuedTrack(track.makeClone(), track.getUserData(RequestMetadata.class)));
+                queue.add(new QueuedTrack(cloned, rm), true);
             } else if (repeatMode == RepeatMode.SINGLE) {
-                queue.addAt(0, new QueuedTrack(track.makeClone(), track.getUserData(RequestMetadata.class)));
+                queue.addAt(0, new QueuedTrack(cloned, rm));
             }
         }
 
