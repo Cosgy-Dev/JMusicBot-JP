@@ -238,7 +238,8 @@ public final class YtDlpManager {
         // 1) 本体DL
         URI binUri = URI.create(GITHUB_LATEST_BASE + assetName);
         log.debug("ダウンロードURL: {}", binUri);
-        Path tmp = Files.createTempFile("yt-dlp-", ".dl");
+        // 同一ドライブ/ディレクトリ上に一時ファイルを作成して、別ドライブ間移動による失敗（例: AppData→D:\ 等）を回避
+        Path tmp = Files.createTempFile(binDir, "yt-dlp-", ".dl");
         log.debug("一時ファイル: {}", tmp);
 
         HttpResponse<InputStream> response = client.send(
@@ -276,7 +277,14 @@ public final class YtDlpManager {
 
         // 3) 配置
         log.debug("yt-dlpを最終位置に移動: {} -> {}", tmp, exePath);
-        Files.move(tmp, exePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        try {
+            // 可能ならアトミックに置き換え（同一ファイルシステム前提）。
+            Files.move(tmp, exePath, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            // 異なるドライブ/ファイルシステム等でATOMIC_MOVEが不可能な場合は通常のMOVEで再試行
+            log.debug("ATOMIC_MOVEが未サポートのため通常MOVEで再試行します: {}", e.getMessage());
+            Files.move(tmp, exePath, StandardCopyOption.REPLACE_EXISTING);
+        }
         grantExecuteIfNeeded(exePath);
         log.info("yt-dlpの配置が完了しました");
     }
