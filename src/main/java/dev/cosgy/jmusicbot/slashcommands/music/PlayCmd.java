@@ -41,6 +41,7 @@ import dev.cosgy.jmusicbot.util.Cache;
 import dev.cosgy.jmusicbot.util.StackTraceUtil;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
@@ -48,7 +49,7 @@ import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.components.buttons.Button;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -301,7 +302,7 @@ public class PlayCmd extends MusicCommand {
 
                 m.editOriginal(addMsg + "\n" + event.getClient().getWarning()
                                 + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setActionRow(loadButton, cancelButton)
+                        .setComponents(ActionRow.of(loadButton, cancelButton))
                         .queue();
 
                 // wait for button click or timeout
@@ -422,7 +423,7 @@ public class PlayCmd extends MusicCommand {
 
                 m.editMessage(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size()
                                 + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setActionRow(loadButton, cancelButton)
+                        .setComponents(ActionRow.of(loadButton, cancelButton))
                         .queue();
                 // wait for a button click
                 bot.getWaiter().waitForEvent(ButtonInteractionEvent.class,

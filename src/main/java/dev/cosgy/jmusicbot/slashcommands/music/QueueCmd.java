@@ -11,7 +11,8 @@ import dev.cosgy.jmusicbot.settings.RepeatMode;
 import dev.cosgy.jmusicbot.slashcommands.MusicCommand;
 import dev.cosgy.jmusicbot.util.QueuePaginatorManager;
 import net.dv8tion.jda.api.Permission;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 import net.dv8tion.jda.api.utils.messages.MessageEditBuilder;
@@ -95,7 +96,7 @@ public class QueueCmd extends MusicCommand {
 
         // Embedとボタンをチャンネルに送信
         event.getChannel().sendMessageEmbeds(queueEmbed)
-                .setActionRow(btnPrev, btnNext, btnClose)
+                .setComponents(ActionRow.of(btnPrev, btnNext, btnClose))
                 .queue();
     }
 
@@ -146,7 +147,7 @@ public class QueueCmd extends MusicCommand {
 
         // Embedとボタンを初期応答に設定
         event.getHook().editOriginalEmbeds(queueEmbed)
-                .setActionRow(btnPrev, btnNext, btnClose)
+                .setComponents(ActionRow.of(btnPrev, btnNext, btnClose))
                 .queue();
     }
 }
