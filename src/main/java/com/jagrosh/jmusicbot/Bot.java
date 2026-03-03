@@ -15,7 +15,7 @@
  */
 package com.jagrosh.jmusicbot;
 
-import com.jagrosh.jdautilities.commons.waiter.EventWaiter;
+import dev.cosgy.jmusicbot.framework.jdautilities.commons.waiter.EventWaiter;
 import com.jagrosh.jmusicbot.audio.AloneInVoiceHandler;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.NowplayingHandler;

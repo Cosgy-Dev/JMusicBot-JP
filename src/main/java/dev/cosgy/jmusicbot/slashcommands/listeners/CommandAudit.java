@@ -1,8 +1,8 @@
 package dev.cosgy.jmusicbot.slashcommands.listeners;
 
-import com.jagrosh.jdautilities.command.Command;
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.CommandListener;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandListener;
 import com.jagrosh.jmusicbot.JMusicBot;
 import dev.cosgy.jmusicbot.util.LastSendTextChannel;
 import net.dv8tion.jda.api.entities.channel.ChannelType;

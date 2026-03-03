@@ -15,11 +15,11 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
-import com.jagrosh.jdautilities.command.Command;
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
-import com.jagrosh.jdautilities.menu.ButtonMenu;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.menu.ButtonMenu;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.PlayStatus;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
@@ -48,7 +48,8 @@ import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.OptionData;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
+import net.dv8tion.jda.api.components.actionrow.ActionRow;
+import net.dv8tion.jda.api.components.buttons.Button;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -301,7 +302,7 @@ public class PlayCmd extends MusicCommand {
 
                 m.editOriginal(addMsg + "\n" + event.getClient().getWarning()
                                 + " この曲の再生リストには他に**" + playlist.getTracks().size() + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setActionRow(loadButton, cancelButton)
+                        .setComponents(ActionRow.of(loadButton, cancelButton))
                         .queue();
 
                 // wait for button click or timeout
@@ -422,7 +423,7 @@ public class PlayCmd extends MusicCommand {
 
                 m.editMessage(addMsg + "\n" + event.getClient().getWarning() + " この曲の再生リストには他に**" + playlist.getTracks().size()
                                 + "**曲が付属しています。トラックを読み込むには " + LOAD + " を選択して下さい。")
-                        .setActionRow(loadButton, cancelButton)
+                        .setComponents(ActionRow.of(loadButton, cancelButton))
                         .queue();
                 // wait for a button click
                 bot.getWaiter().waitForEvent(ButtonInteractionEvent.class,

@@ -15,9 +15,9 @@
  */
 package dev.cosgy.jmusicbot.slashcommands;
 
-import com.jagrosh.jdautilities.command.CommandClient;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandClient;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import net.dv8tion.jda.api.Permission;
 
 public abstract class AdminCommand extends SlashCommand {
