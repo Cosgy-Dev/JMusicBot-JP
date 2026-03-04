@@ -42,7 +42,7 @@ public abstract class Command extends Interaction
     protected String name = "null";
 
     
-    protected String help = "no help available";
+    protected String help = "ヘルプは未設定です";
 
     
     protected Category category = null;
@@ -114,7 +114,7 @@ public abstract class Command extends Interaction
         // チャンネル利用可否判定
         if(event.isFromType(ChannelType.TEXT) && !isAllowed(event.getTextChannel()))
         {
-            terminate(event, "That command cannot be used in this channel!");
+            terminate(event, "このチャンネルではこのコマンドを使用できません。");
             return;
         }
 
@@ -122,7 +122,7 @@ public abstract class Command extends Interaction
         if(requiredRole!=null)
             if(!event.isFromType(ChannelType.TEXT) || event.getMember().getRoles().stream().noneMatch(r -> r.getName().equalsIgnoreCase(requiredRole)))
             {
-                terminate(event, event.getClient().getError()+" You must have a role called `"+requiredRole+"` to use that!");
+                terminate(event, event.getClient().getError()+" このコマンドを使うには `"+requiredRole+"` ロールが必要です。");
                 return;
             }
 
@@ -136,7 +136,7 @@ public abstract class Command extends Interaction
                 {
                     if(!event.getMember().hasPermission(event.getGuildChannel(), p))
                     {
-                        terminate(event, String.format(userMissingPermMessage, event.getClient().getError(), p.getName(), "channel"));
+                        terminate(event, String.format(userMissingPermMessage, event.getClient().getError(), p.getName(), "チャンネル"));
                         return;
                     }
                 }
@@ -144,7 +144,7 @@ public abstract class Command extends Interaction
                 {
                     if(!event.getMember().hasPermission(p))
                     {
-                        terminate(event, String.format(userMissingPermMessage, event.getClient().getError(), p.getName(), "server"));
+                        terminate(event, String.format(userMissingPermMessage, event.getClient().getError(), p.getName(), "サーバー"));
                         return;
                     }
                 }
@@ -166,19 +166,19 @@ public abstract class Command extends Interaction
                     AudioChannelUnion channel = voiceState != null ? voiceState.getChannel() : null;
 
                     if (channel == null || !channel.getType().isAudio()) {
-                        terminate(event, event.getClient().getError() + " You must be in a voice channel to use that!");
+                        terminate(event, event.getClient().getError() + " このコマンドを使うにはボイスチャンネルに参加してください。");
                         return;
                     }
 
                     // ボイスチャンネル内のBot権限を判定
                     if (!selfMember.hasPermission(channel, p)) {
-                        terminate(event, String.format(botMissingPermMessage, event.getClient().getError(), p.getName(), "voice channel"));
+                        terminate(event, String.format(botMissingPermMessage, event.getClient().getError(), p.getName(), "ボイスチャンネル"));
                         return;
                     }
                 } else {
                     // ギルド全体権限を判定
                     if (!selfMember.hasPermission(p)) {
-                        terminate(event, String.format(botMissingPermMessage, event.getClient().getError(), p.getName(), "server"));
+                        terminate(event, String.format(botMissingPermMessage, event.getClient().getError(), p.getName(), "サーバー"));
                         return;
                     }
                 }
@@ -187,13 +187,13 @@ public abstract class Command extends Interaction
             // NSFW判定
             if (nsfwOnly && event.isFromType(ChannelType.TEXT) && !event.getTextChannel().isNSFW())
             {
-                terminate(event, "This command may only be used in NSFW text channels!");
+                terminate(event, "このコマンドはNSFWテキストチャンネルでのみ使用できます。");
                 return;
             }
         }
         else if(guildOnly)
         {
-            terminate(event, event.getClient().getError()+" This command cannot be used in direct messages");
+            terminate(event, event.getClient().getError()+" このコマンドはダイレクトメッセージでは使用できません。");
             return;
         }
 
@@ -353,7 +353,7 @@ public abstract class Command extends Interaction
     {
         if(remaining<=0)
             return null;
-        String front = event.getClient().getWarning()+" That command is on cooldown for "+remaining+" more seconds";
+        String front = event.getClient().getWarning()+" このコマンドはあと"+remaining+"秒クールダウン中です";
         if(cooldownScope.equals(CooldownScope.USER))
             return front+"!";
         else if(cooldownScope.equals(CooldownScope.USER_GUILD) && event.getGuild()==null)

@@ -31,9 +31,10 @@ JMusicBotは、シンプルでかつ操作性の良いUIを使用しています
 
 # セットアップ
 
-このボットはJava11以上のバージョンが必要です。
+このボットはJava25以上のバージョンが必要です。
 Javaがインストールされていない場合は、[こちら](https://www.oracle.com/jp/java/technologies/downloads/) からダウンロードしてください。
 このボットを自分で起動するには [Cosgy Dev 公式ページ](https://www.cosgy.dev/2019/09/06/jmusicbot-setup/) を参照してください
+また、DAVEを使用するため、起動時には `--enable-native-access=ALL-UNNAMED` の付与を推奨します。
 
 # Dockerを使用したセットアップ
 
@@ -58,4 +59,3 @@ Dockerを使用する場合は、[こちら](https://hub.docker.com/r/cyberrex/j
 # コマンドの例
 
 ![Example](https://i.imgur.com/tevrtKt.png)
-

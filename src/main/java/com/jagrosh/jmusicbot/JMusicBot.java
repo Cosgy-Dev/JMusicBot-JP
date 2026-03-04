@@ -16,6 +16,7 @@
 package com.jagrosh.jmusicbot;
 
 import com.github.lalyos.jfiglet.FigletFont;
+import club.minnced.discord.jdave.interop.JDaveSessionFactory;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandClientBuilder;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
@@ -36,6 +37,7 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -67,6 +69,24 @@ public class JMusicBot {
     public static boolean COMMAND_AUDIT_ENABLED = false;
 
     /**
+     * DAVE音声暗号化設定を構築します。
+     * 初期化に失敗した場合はnullを返し、既存暗号方式にフォールバックします。
+     */
+    private static AudioModuleConfig createDaveAudioModuleConfig(Logger log, Prompt prompt) {
+        try {
+            AudioModuleConfig config = new AudioModuleConfig()
+                    .withDaveSessionFactory(new JDaveSessionFactory());
+            log.info("DAVE音声暗号化を有効化しました。");
+            return config;
+        } catch (Throwable t) {
+            log.warn("DAVE音声暗号化の初期化に失敗しました。従来方式で継続します: {}", t.toString());
+            prompt.alert(Prompt.Level.WARNING, "DAVE",
+                    "DAVEの初期化に失敗したため、従来の音声暗号化方式で継続します。詳細: " + t.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
@@ -87,7 +107,8 @@ public class JMusicBot {
         for (String arg : args)
             if ("-nogui".equalsIgnoreCase(arg)) {
                 prompt.alert(Prompt.Level.WARNING, "GUI", "-noguiフラグは廃止予定です。 "
-                        + "jarの名前の前に-Dnogui = trueフラグを使用してください。 例：java -jar -Dnogui=true JMusicBot.jar");
+                        + "jarの名前の前に-Dnogui = trueフラグを使用してください。 "
+                        + "例：java --enable-native-access=ALL-UNNAMED -Dnogui=true -jar JMusicBot.jar");
             } else if ("-nocheckupdates".equalsIgnoreCase(arg)) {
                 CHECK_UPDATE = false;
                 log.info("アップデートチェックを無効にしました");
@@ -242,12 +263,19 @@ public class JMusicBot {
 
         // attempt to log in and start
         try {
-            JDA jda = JDABuilder.create(config.getToken(), Arrays.asList(INTENTS))
+            JDABuilder jdaBuilder = JDABuilder.create(config.getToken(), Arrays.asList(INTENTS))
                     .enableCache(CacheFlag.MEMBER_OVERRIDES, CacheFlag.VOICE_STATE)
                     .disableCache(CacheFlag.ACTIVITY, CacheFlag.CLIENT_STATUS, CacheFlag.EMOJI, CacheFlag.ONLINE_STATUS)
                     .setActivity(nogame ? null : Activity.playing("ロード中..."))
                     .setStatus(config.getStatus() == OnlineStatus.INVISIBLE || config.getStatus() == OnlineStatus.OFFLINE
-                            ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB)
+                            ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB);
+
+            AudioModuleConfig daveConfig = createDaveAudioModuleConfig(log, prompt);
+            if (daveConfig != null) {
+                jdaBuilder.setAudioModuleConfig(daveConfig);
+            }
+
+            JDA jda = jdaBuilder
                     .addEventListeners(cb.build(), waiter, new Listener(bot),new QueueButtonListener(bot))
                     .setBulkDeleteSplittingEnabled(true)
                     .build();

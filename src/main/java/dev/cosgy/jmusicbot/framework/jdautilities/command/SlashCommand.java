@@ -80,7 +80,7 @@ public abstract class SlashCommand extends Command
         // オーナー権限判定
         if(ownerCommand && !(isOwner(event, client)))
         {
-            terminate(event, "Only an owner may run this command. Sorry.", client);
+            terminate(event, "このコマンドはボットのオーナーのみ実行できます。", client);
             return;
         }
 
@@ -88,7 +88,7 @@ public abstract class SlashCommand extends Command
         try {
             if(!isAllowed(event.getTextChannel()))
             {
-                terminate(event, "That command cannot be used in this channel!", client);
+                terminate(event, "このチャンネルではこのコマンドを使用できません。", client);
                 return;
             }
         } catch (Exception e) {
@@ -99,7 +99,7 @@ public abstract class SlashCommand extends Command
         if(requiredRole!=null)
             if(!(event.getChannelType() == ChannelType.TEXT) || event.getMember().getRoles().stream().noneMatch(r -> r.getName().equalsIgnoreCase(requiredRole)))
             {
-                terminate(event, client.getError()+" You must have a role called `"+requiredRole+"` to use that!", client);
+                terminate(event, client.getError()+" このコマンドを使うには `"+requiredRole+"` ロールが必要です。", client);
                 return;
             }
 
@@ -117,7 +117,7 @@ public abstract class SlashCommand extends Command
                 {
                     if(!event.getMember().hasPermission(event.getGuildChannel(), p))
                     {
-                        terminate(event, String.format(userMissingPermMessage, client.getError(), p.getName(), "channel"), client);
+                        terminate(event, String.format(userMissingPermMessage, client.getError(), p.getName(), "チャンネル"), client);
                         return;
                     }
                 }
@@ -125,7 +125,7 @@ public abstract class SlashCommand extends Command
                 {
                     if(!event.getMember().hasPermission(p))
                     {
-                        terminate(event, String.format(userMissingPermMessage, client.getError(), p.getName(), "server"), client);
+                        terminate(event, String.format(userMissingPermMessage, client.getError(), p.getName(), "サーバー"), client);
                         return;
                     }
                 }
@@ -147,19 +147,19 @@ public abstract class SlashCommand extends Command
                     AudioChannelUnion channel = voiceState != null ? voiceState.getChannel() : null;
 
                     if (channel == null || !channel.getType().isAudio()) {
-                        terminate(event, client.getError() + " You must be in a voice channel to use that!", client);
+                        terminate(event, client.getError() + " このコマンドを使うにはボイスチャンネルに参加してください。", client);
                         return;
                     }
 
                     // ボイスチャンネル内のBot権限を判定
                     if (!selfMember.hasPermission(channel, p)) {
-                        terminate(event, String.format(botMissingPermMessage, client.getError(), p.getName(), "voice channel"), client);
+                        terminate(event, String.format(botMissingPermMessage, client.getError(), p.getName(), "ボイスチャンネル"), client);
                         return;
                     }
                 } else {
                     // ギルド全体権限を判定
                     if (!selfMember.hasPermission(p)) {
-                        terminate(event, String.format(botMissingPermMessage, client.getError(), p.getName(), "server"), client);
+                        terminate(event, String.format(botMissingPermMessage, client.getError(), p.getName(), "サーバー"), client);
                         return;
                     }
                 }
@@ -168,13 +168,13 @@ public abstract class SlashCommand extends Command
             // NSFW判定
             if (nsfwOnly && event.getChannelType() == ChannelType.TEXT && !event.getTextChannel().isNSFW())
             {
-                terminate(event, "This command may only be used in NSFW text channels!", client);
+                terminate(event, "このコマンドはNSFWテキストチャンネルでのみ使用できます。", client);
                 return;
             }
         }
         else if(guildOnly)
         {
-            terminate(event, client.getError()+" This command cannot be used in direct messages", client);
+            terminate(event, client.getError()+" このコマンドはダイレクトメッセージでは使用できません。", client);
             return;
         }
 
@@ -364,7 +364,7 @@ public abstract class SlashCommand extends Command
     {
         if(remaining<=0)
             return null;
-        String front = client.getWarning()+" That command is on cooldown for "+remaining+" more seconds";
+        String front = client.getWarning()+" このコマンドはあと"+remaining+"秒クールダウン中です";
         if(cooldownScope.equals(CooldownScope.USER))
             return front+"!";
         else if(cooldownScope.equals(CooldownScope.USER_GUILD) && event.getGuild()==null)

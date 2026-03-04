@@ -9,8 +9,8 @@ public abstract class Interaction {
     protected Permission[] botPermissions = new Permission[0];
     protected int cooldown = 0;
     protected CooldownScope cooldownScope = CooldownScope.USER;
-    protected String userMissingPermMessage = "%s You need the `%s` permission in this %s to use this command!";
-    protected String botMissingPermMessage = "%s I need the `%s` permission in this %s to do that!";
+    protected String userMissingPermMessage = "%s このコマンドを使うには、`%s` 権限がこの%sで必要です。";
+    protected String botMissingPermMessage = "%s この操作を実行するには、私に`%s` 権限がこの%sで必要です。";
 
     public Permission[] getUserPermissions() {
         return userPermissions;

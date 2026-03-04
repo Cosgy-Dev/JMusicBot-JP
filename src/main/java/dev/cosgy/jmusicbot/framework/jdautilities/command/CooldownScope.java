@@ -4,14 +4,14 @@ import java.util.Arrays;
 import java.util.stream.Collectors;
 
 public enum CooldownScope {
-    USER("per user"),
-    USER_GUILD("per user per guild"),
-    USER_CHANNEL("per user per channel"),
-    GUILD("per guild"),
-    CHANNEL("per channel"),
-    SHARD("per shard"),
-    USER_SHARD("per user per shard"),
-    GLOBAL("globally");
+    USER("ユーザー単位"),
+    USER_GUILD("ユーザー・サーバー単位"),
+    USER_CHANNEL("ユーザー・チャンネル単位"),
+    GUILD("サーバー単位"),
+    CHANNEL("チャンネル単位"),
+    SHARD("シャード単位"),
+    USER_SHARD("ユーザー・シャード単位"),
+    GLOBAL("全体");
 
     public final String errorSpecification;
 

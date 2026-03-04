@@ -113,7 +113,7 @@ public class SpotifyCmd extends MusicCommand {
         }
 
         if (!isSpotifyTrackUrl(trackUrl)) {
-            event.reply("Error: 指定されたURLはSpotifyの曲のURLではありません").queue();
+            event.reply("エラー: 指定されたURLはSpotifyの曲URLではありません。").queue();
             return;
         }
 
@@ -139,10 +139,10 @@ public class SpotifyCmd extends MusicCommand {
             Color color = new Color(30, 215, 96);
 
             EmbedBuilder embed = new EmbedBuilder();
-            embed.setTitle("Track Information");
-            embed.addField("Track Name", trackName, true);
-            embed.addField("Album Name", albumName, true);
-            embed.addField("Artist Name", artistName, true);
+            embed.setTitle("トラック情報");
+            embed.addField("曲名", trackName, true);
+            embed.addField("アルバム名", albumName, true);
+            embed.addField("アーティスト名", artistName, true);
             embed.setImage(albumImageUrl);
             embed.setColor(color);
 
@@ -150,7 +150,7 @@ public class SpotifyCmd extends MusicCommand {
 
             event.reply("`[" + trackName + "]`を読み込み中です…").queue(m -> bot.getPlayerManager().loadItemOrdered(event.getGuild(), "ytmsearch:"+trackName + " " + artistName, new SlashResultHandler(m, event)));
         } catch (IOException | InterruptedException e) {
-            event.reply("Error: " + e.getMessage()).queue();
+            event.reply("エラー: " + e.getMessage()).queue();
         }
     }
 
@@ -175,7 +175,7 @@ public class SpotifyCmd extends MusicCommand {
         }
 
         if (!isSpotifyTrackUrl(trackUrl)) {
-            event.reply("Error: 指定されたURLはSpotifyの曲のURLではありません");
+            event.reply("エラー: 指定されたURLはSpotifyの曲URLではありません。");
             return;
         }
 
@@ -213,10 +213,10 @@ public class SpotifyCmd extends MusicCommand {
             Color color = Color.getHSBColor((float) hue / 360, 1.0f, 1.0f);
 
             EmbedBuilder embed = new EmbedBuilder();
-            embed.setTitle("Track Information");
-            embed.addField("Track Name", trackName, true);
-            embed.addField("Album Name", albumName, true);
-            embed.addField("Artist Name", artistName, true);
+            embed.setTitle("トラック情報");
+            embed.addField("曲名", trackName, true);
+            embed.addField("アルバム名", albumName, true);
+            embed.addField("アーティスト名", artistName, true);
             embed.setImage(albumImageUrl);
             embed.setColor(color);
 
@@ -224,7 +224,7 @@ public class SpotifyCmd extends MusicCommand {
 
             event.reply("`[" + trackName + "]`を読み込み中です…", m -> bot.getPlayerManager().loadItemOrdered(event.getGuild(), "ytmsearch:"+trackName + " " + artistName, new ResultHandler(m, event)));
         } catch (IOException | InterruptedException e) {
-            event.reply("Error: " + e.getMessage());
+            event.reply("エラー: " + e.getMessage());
         }
     }
 
@@ -405,4 +405,3 @@ public class SpotifyCmd extends MusicCommand {
         }
     }
 }
-

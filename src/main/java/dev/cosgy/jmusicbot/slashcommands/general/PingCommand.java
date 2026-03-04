@@ -42,16 +42,16 @@ public class PingCommand extends SlashCommand {
 
     @Override
     protected void execute(SlashCommandEvent event) {
-        event.reply("Ping: ...").queue(m -> {
-            m.editOriginal("Websocket: " + event.getJDA().getGatewayPing() + "ms").queue();
+        event.reply("応答速度を測定中...").queue(m -> {
+            m.editOriginal("WebSocket: " + event.getJDA().getGatewayPing() + "ms").queue();
         });
     }
 
     @Override
     protected void execute(CommandEvent event) {
-        event.reply("Ping: ...", m -> {
+        event.reply("応答速度を測定中...", m -> {
             long ping = event.getMessage().getTimeCreated().until(m.getTimeCreated(), ChronoUnit.MILLIS);
-            m.editMessage("Ping: " + ping + "ms | Websocket: " + event.getJDA().getGatewayPing() + "ms").queue();
+            m.editMessage("応答速度: " + ping + "ms | WebSocket: " + event.getJDA().getGatewayPing() + "ms").queue();
         });
     }
 
