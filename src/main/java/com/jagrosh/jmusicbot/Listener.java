@@ -104,6 +104,10 @@ public class Listener extends ListenerAdapter {
     public void onGuildVoiceLeave(@NotNull GuildVoiceUpdateEvent event) {
         if (event.getChannelLeft() == null) return;
 
+        if (event.getEntity().equals(event.getGuild().getSelfMember()) && event.getChannelLeft() instanceof VoiceChannel) {
+            bot.getNowplayingHandler().clearVoiceChannelStatus((VoiceChannel) event.getChannelLeft(), event.getGuild(), false);
+        }
+
         //NUP = false -> NUS = false -> return
         //NUP = false -> NUS = true -> GO
         //NUP = true -> GO
@@ -131,7 +135,7 @@ public class Listener extends ListenerAdapter {
                     bot.getCacheLoader().Save(event.getGuild().toString(), handler.getQueue());
                 }
                 Objects.requireNonNull(handler).stopAndClear();
-                event.getGuild().getAudioManager().closeAudioConnection();
+                bot.closeAudioConnection(event.getGuild().getIdLong());
             }
         }
     }

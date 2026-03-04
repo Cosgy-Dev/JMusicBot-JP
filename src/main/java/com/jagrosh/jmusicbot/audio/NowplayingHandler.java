@@ -143,9 +143,53 @@ public class NowplayingHandler {
                 } catch (PermissionException | RateLimitedException ignore) {
                 }
             }
+        } else {
+            clearVoiceChannelStatus(voiceChannel, guild, wait);
         }
 
 
+    }
+
+    public void clearVoiceChannelStatus(long guildId, boolean wait) {
+        Guild guild = bot.getJDA().getGuildById(guildId);
+        if (guild == null) {
+            return;
+        }
+
+        AudioChannelUnion chan = guild.getAudioManager().getConnectedChannel();
+        if (!(chan instanceof VoiceChannel)) {
+            GuildVoiceState voiceState = guild.getSelfMember().getVoiceState();
+            chan = voiceState != null ? voiceState.getChannel() : null;
+            if (!(chan instanceof VoiceChannel)) {
+                return;
+            }
+        }
+
+        clearVoiceChannelStatus((VoiceChannel) chan, guild, wait);
+    }
+
+    public void clearVoiceChannelStatus(VoiceChannel voiceChannel, Guild guild, boolean wait) {
+        if (voiceChannel == null || guild == null) {
+            return;
+        }
+        if (!guild.getSelfMember().hasPermission(voiceChannel, Permission.VOICE_SET_STATUS)) {
+            return;
+        }
+
+        String currentStatus = voiceChannel.getStatus();
+        if (currentStatus == null || currentStatus.isBlank()) {
+            return;
+        }
+
+        try {
+            voiceChannel.modifyStatus(null).complete(wait);
+        } catch (IllegalArgumentException ignored) {
+            try {
+                voiceChannel.modifyStatus("").complete(wait);
+            } catch (PermissionException | RateLimitedException ignored2) {
+            }
+        } catch (PermissionException | RateLimitedException ignore) {
+        }
     }
 
     // "event"-based methods

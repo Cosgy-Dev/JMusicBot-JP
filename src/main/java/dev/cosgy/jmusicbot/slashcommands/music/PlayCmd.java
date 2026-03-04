@@ -93,6 +93,7 @@ public class PlayCmd extends MusicCommand {
                 if (DJCommand.checkDJPermission(event)) {
                     handler.getPlayer().setPaused(false);
                     event.replySuccess("**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**の再生を再開しました。");
+                    bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
 
                     Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PLAYING);
                 } else
@@ -183,6 +184,7 @@ public class PlayCmd extends MusicCommand {
 
                     handler.getPlayer().setPaused(false);
                     event.reply(event.getClient().getSuccess() + "**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**の再生を再開しました。").queue();
+                    bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
 
                     Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PLAYING);
                 } else
@@ -549,6 +551,7 @@ public class PlayCmd extends MusicCommand {
 
                         handler.getPlayer().setPaused(false);
                         event.reply(event.getClient().getSuccess() + "**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**の再生を再開しました。").queue();
+                        bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
 
                         Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PLAYING);
                     } else

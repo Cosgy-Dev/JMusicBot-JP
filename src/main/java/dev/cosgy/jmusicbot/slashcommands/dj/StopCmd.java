@@ -68,7 +68,7 @@ public class StopCmd extends DJCommand {
             event.reply(event.getClient().getSuccess() + " 再生待ちを削除して、再生を停止しました。");
         }
         handler.stopAndClear();
-        event.getGuild().getAudioManager().closeAudioConnection();
+        bot.closeAudioConnection(event.getGuild().getIdLong());
     }
 
     @Override
@@ -87,7 +87,7 @@ public class StopCmd extends DJCommand {
             event.reply(event.getClient().getSuccess() + " 再生待ちを削除して、再生を停止しました。").queue();
             log.info(event.getGuild().getName() + "で再生待ちを削除して,ボイスチャンネルから切断しました。");
             handler.stopAndClear();
-            event.getGuild().getAudioManager().closeAudioConnection();
+            bot.closeAudioConnection(event.getGuild().getIdLong());
             return;
         }
 
@@ -100,7 +100,7 @@ public class StopCmd extends DJCommand {
             log.info(event.getGuild().getName() + "で再生待ちを削除して,ボイスチャンネルから切断しました。");
         }
         handler.stopAndClear();
-        event.getGuild().getAudioManager().closeAudioConnection();
+        bot.closeAudioConnection(event.getGuild().getIdLong());
     }
 
     @Override

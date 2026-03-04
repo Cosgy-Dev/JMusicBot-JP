@@ -76,7 +76,7 @@ public class AloneInVoiceHandler {
             }
 
             handler.stopAndClear();
-            guild.getAudioManager().closeAudioConnection();
+            bot.closeAudioConnection(guild.getIdLong());
 
             toRemove.add(entrySet.getKey());
         }
