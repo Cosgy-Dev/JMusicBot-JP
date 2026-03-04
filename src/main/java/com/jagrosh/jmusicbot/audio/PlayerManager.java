@@ -77,7 +77,11 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
         YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true);
         yt.setPlaylistPageCount(10);
-        yt.useOauth2(null, false);
+        if (bot.getConfig().isYouTubeOauth2Enabled()) {
+            String refreshToken = bot.getConfig().getYouTubeOauth2RefreshToken();
+            yt.useOauth2(refreshToken == null || refreshToken.isBlank() ? null : refreshToken, false);
+            logger.info("YouTube OAuth2 を有効化しました。");
+        }
         registerSourceManager(yt);
 
         AudioSourceManagers.registerRemoteSources(this);
