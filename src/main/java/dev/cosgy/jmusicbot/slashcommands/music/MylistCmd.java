@@ -1,8 +1,8 @@
 package dev.cosgy.jmusicbot.slashcommands.music;
 
-import com.jagrosh.jdautilities.command.Command;
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.QueuedTrack;
@@ -25,7 +25,7 @@ public class MylistCmd extends MusicCommand {
 
     public MylistCmd(Bot bot) {
         super(bot);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         this.name = "mylist";
         this.arguments = "<append|delete|make|all|show>";
         this.help = "自分専用の再生リストを管理";
@@ -60,7 +60,7 @@ public class MylistCmd extends MusicCommand {
             this.name = "show";
             this.help = "指定したマイリスト内の曲を表示";
             this.arguments = "<name>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             this.ownerCommand = false;
 
             List<OptionData> options = new ArrayList<>();
@@ -218,7 +218,7 @@ public class MylistCmd extends MusicCommand {
             this.aliases = new String[]{"create"};
             this.help = "再生リストを新規作成";
             this.arguments = "<name>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
 
             List<OptionData> options = new ArrayList<>();
@@ -293,7 +293,7 @@ public class MylistCmd extends MusicCommand {
             this.aliases = new String[]{"remove"};
             this.help = "既存のマイリストを削除";
             this.arguments = "<name>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
 
             List<OptionData> options = new ArrayList<>();
@@ -347,7 +347,7 @@ public class MylistCmd extends MusicCommand {
             this.aliases = new String[]{"add"};
             this.help = "既存のマイリストに曲を追加";
             this.arguments = "<name> <URL> | <URL> | ...";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -420,7 +420,7 @@ public class MylistCmd extends MusicCommand {
             this.name = "all";
             this.aliases = new String[]{"available", "list"};
             this.help = "利用可能なすべてのマイリストを表示";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
         }
 

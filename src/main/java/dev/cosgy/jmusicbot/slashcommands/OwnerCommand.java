@@ -15,7 +15,7 @@
  */
 package dev.cosgy.jmusicbot.slashcommands;
 
-import com.jagrosh.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
 
 /**
  * @author John Grosh (john.a.grosh@gmail.com)

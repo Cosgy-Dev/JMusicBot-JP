@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.utils.OtherUtil;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
@@ -38,7 +38,7 @@ public class SetavatarCmd extends OwnerCommand {
         this.help = "ボットのアバターを設定します";
         this.arguments = "<url>";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         List<OptionData> options = new ArrayList<>();
         options.add(new OptionData(OptionType.STRING, "image", "画像のURL", true));
         this.options = options;

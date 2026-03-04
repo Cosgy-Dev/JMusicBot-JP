@@ -15,7 +15,7 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
 import net.dv8tion.jda.api.exceptions.RateLimitedException;
@@ -34,7 +34,7 @@ public class SetnameCmd extends OwnerCommand {
         this.help = "ボットの名前を設定します。";
         this.arguments = "<name>";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
 
         List<OptionData> options = new ArrayList<>();
         options.add(new OptionData(OptionType.STRING, "name", "新しいボットの名前", true));

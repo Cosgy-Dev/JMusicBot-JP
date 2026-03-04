@@ -15,7 +15,7 @@
  */
 package com.jagrosh.jmusicbot;
 
-import com.jagrosh.jdautilities.commons.waiter.EventWaiter;
+import dev.cosgy.jmusicbot.framework.jdautilities.commons.waiter.EventWaiter;
 import com.jagrosh.jmusicbot.audio.AloneInVoiceHandler;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.NowplayingHandler;
@@ -154,7 +154,10 @@ public class Bot {
     public void closeAudioConnection(long guildId) {
         Guild guild = jda.getGuildById(guildId);
         if (guild != null)
-            threadpool.submit(() -> guild.getAudioManager().closeAudioConnection());
+            threadpool.submit(() -> {
+                nowplaying.clearVoiceChannelStatus(guildId, false);
+                guild.getAudioManager().closeAudioConnection();
+            });
     }
 
     public void resetGame() {
@@ -171,6 +174,7 @@ public class Bot {
         if (jda.getStatus() != JDA.Status.SHUTTING_DOWN) {
             jda.getGuilds().forEach(g ->
             {
+                nowplaying.clearVoiceChannelStatus(g.getIdLong(), true);
                 g.getAudioManager().closeAudioConnection();
                 AudioHandler ah = (AudioHandler) g.getAudioManager().getSendingHandler();
                 if (ah != null) {

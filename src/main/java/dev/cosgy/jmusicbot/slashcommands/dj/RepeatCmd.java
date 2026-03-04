@@ -15,9 +15,9 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.dj;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.settings.Settings;
 import dev.cosgy.jmusicbot.settings.RepeatMode;
@@ -37,7 +37,7 @@ public class RepeatCmd extends DJCommand {
         this.help = "再生待ち楽曲の再生が終了したら曲を再追加します";
         this.arguments = "[all|on|single|one|off]";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = true;
+        //this.guildOnly = true;
 
         this.children = new SlashCommand[]{new SingleCmd(bot), new AllCmd(bot), new OffCmd(bot)};
 
@@ -89,7 +89,7 @@ public class RepeatCmd extends DJCommand {
             super(bot);
             this.name = "single";
             this.help = "１曲リピートモードに変更します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
 
         @Override
@@ -113,7 +113,7 @@ public class RepeatCmd extends DJCommand {
             super(bot);
             this.name = "all";
             this.help = "全曲リピートモードに変更します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
 
         @Override
@@ -137,7 +137,7 @@ public class RepeatCmd extends DJCommand {
             super(bot);
             this.name = "off";
             this.help = "リピートを無効に変更します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
 
         @Override

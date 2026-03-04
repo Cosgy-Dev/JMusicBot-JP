@@ -1,8 +1,8 @@
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
-import com.jagrosh.jdautilities.commons.JDAUtilitiesInfo;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.commons.JDAUtilitiesInfo;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.utils.OtherUtil;
 import com.sedmelluq.discord.lavaplayer.tools.PlayerLibrary;
@@ -23,7 +23,7 @@ public class DebugCmd extends OwnerCommand {
         this.name = "debug";
         this.help = "デバッグ情報を表示します";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
     }
 
     @Override

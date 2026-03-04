@@ -15,9 +15,9 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.general;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.settings.Settings;
 import com.jagrosh.jmusicbot.utils.FormatUtil;
@@ -40,7 +40,7 @@ public class SettingsCmd extends SlashCommand {
         this.name = "settings";
         this.help = "Botの設定を表示します";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = true;
+        //this.guildOnly = true;
     }
 
     @Override

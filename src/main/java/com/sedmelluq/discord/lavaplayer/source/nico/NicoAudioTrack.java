@@ -35,6 +35,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -62,7 +65,7 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
 
     @Override
     public void process(LocalAudioTrackExecutor localExecutor) throws Exception {
-        File playbackUrl = downloadAudio();
+        File playbackUrl = downloadAudio(NicoAudioSourceManager.ytDlpPath);
 
         log.debug("Starting NicoNico track from URL: {}", playbackUrl);
         try (LocalSeekableInputStream inputStream = new LocalSeekableInputStream(playbackUrl)) {
@@ -71,80 +74,132 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
     }
 
     //
-    private @NotNull File downloadAudio() {
-        String path = new File(".").getAbsoluteFile().getParent();
-        Path file = Path.of(path, "cache" + File.separator + getIdentifier() + ".wav");
+    private @NotNull File downloadAudio(@NotNull Path ytDlpPath) {
+        try {
+            // ルートとキャッシュ先
+            Path botRoot = Paths.get("").toAbsolutePath().normalize();
+            Path cacheDir = botRoot.resolve("cache");
+            Files.createDirectories(cacheDir);
 
-        if (Files.notExists(file)) {
-            try {
-                log.info("Downloading NicoNico track from: {}", getIdentifier());
-                List<String> command = new java.util.ArrayList<>();
-                command.add("yt-dlp");
+            // 出力ファイル（絶対パス）
+            String id = getIdentifier(); // 既存メソッド想定
+            Path outFile = cacheDir.resolve(id + ".wav");
 
-                if (NicoAudioSourceManager.userName != null && NicoAudioSourceManager.password != null) {
-                    command.add("--username");
-                    command.add(NicoAudioSourceManager.userName);
-                    command.add("--password");
-                    command.add(NicoAudioSourceManager.password);
-                    log.info("ニコニコのログイン情報を使用しました。");
-                    if (NicoAudioSourceManager.twofactor != null) {
-                        // 二段階認証コードのフォーマットチェック（任意: 6桁数字等）
-                        String code = TOTPGenerator.getCode(NicoAudioSourceManager.twofactor);
-                        if (code != null && code.matches("\\d{6}")) {
-                            command.add("--twofactor");
-                            command.add(code);
-                            log.info("二段階認証を行いました:{}", code);
-                        } else {
-                            log.warn("無効な二段階認証コード:{}", code);
-                        }
-                    }
-                }
-
-                command.add("--extract-audio");
-                command.add("--audio-format");
-                command.add("wav");
-                command.add("https://www.nicovideo.jp/watch/" + getIdentifier());
-                command.add("--output");
-                command.add("cache/" + getIdentifier() + ".wav");
-
-                ProcessBuilder processBuilder = new ProcessBuilder(command);
-                processBuilder.directory(new File(path)); // カレントディレクトリを設定（必要に応じて）
-                Process process = processBuilder.start();
-
-                // エラーストリームを読み取るためのスレッドを作成
-                new Thread(() -> {
-                    try (BufferedReader errorReader = new BufferedReader(new InputStreamReader(process.getErrorStream()))) {
-                        String line;
-                        while ((line = errorReader.readLine()) != null) {
-                            log.error(line);
-                        }
-                    } catch (IOException e) {
-                        log.error("Error reading process error stream", e);
-                    }
-                }).start();
-
-                // 標準出力ストリームを読み取るためのスレッドを作成
-                new Thread(() -> {
-                    try (BufferedReader inputReader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-                        String line;
-                        while ((line = inputReader.readLine()) != null) {
-                            log.debug(line);
-                        }
-                    } catch (IOException e) {
-                        log.error("Error reading process input stream", e);
-                    }
-                }).start();
-
-                int exitCode = process.waitFor();
-                if (exitCode != 0) {
-                    throw new RuntimeException("yt-dlp command failed with exit code " + exitCode);
-                }
-                process.destroy();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
+            // 既に存在かつ非ゼロならそのまま返す
+            if (Files.isRegularFile(outFile) && Files.size(outFile) > 0) {
+                return outFile.toFile();
             }
+
+            log.info("Downloading NicoNico track via yt-dlp: id={} -> {}", id, outFile);
+
+            // コマンド構築（yt-dlp は自己配置バイナリの絶対パスを使用）
+            List<String> cmd = new ArrayList<>();
+            cmd.add(ytDlpPath.toString());
+
+            // 実行の安定化オプション
+            Collections.addAll(cmd,
+                    "--no-progress",
+                    "--no-playlist",
+                    "--ignore-config",
+                    "--newline",
+                    "--restrict-filenames",
+                    "--no-overwrites" // 既存ファイル保護（存在時はスキップ）
+            );
+
+            // ログイン（任意）
+            if (NicoAudioSourceManager.userName != null && NicoAudioSourceManager.password != null) {
+                cmd.add("--username");
+                cmd.add(NicoAudioSourceManager.userName);
+                cmd.add("--password");
+                cmd.add(NicoAudioSourceManager.password);
+                log.info("ニコニコのログイン情報を使用しました。");
+
+                // TOTP（二段階認証）
+                if (NicoAudioSourceManager.twofactor != null) {
+                    String code = TOTPGenerator.getCode(NicoAudioSourceManager.twofactor);
+                    if (code != null && code.matches("\\d{6}")) {
+                        cmd.add("--twofactor");
+                        cmd.add(code);
+                        log.info("二段階認証を行いました: {}", code);
+                    } else {
+                        log.warn("無効な二段階認証コード: {}", code);
+                    }
+                }
+            }
+
+            // 音声抽出（WAV/最高品質）
+            Collections.addAll(cmd,
+                    "--extract-audio",
+                    "--audio-format", "wav",
+                    "--audio-quality", "0"
+            );
+
+            // 出力先は絶対パスで（相対だと動作環境によりズレるため）
+            cmd.add("--output");
+            cmd.add(outFile.toString());
+
+            // 対象URL
+            cmd.add("https://www.nicovideo.jp/watch/" + id);
+
+            // プロセス実行：エラー/標準出力を一本化して読みやすく
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.directory(botRoot.toFile());
+            pb.redirectErrorStream(true);
+            Process proc = pb.start();
+
+            StringBuilder logBuf = new StringBuilder(4096);
+            try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    logBuf.append(line).append('\n');
+                    // yt-dlp の進捗は長いので DEBUG で
+                    log.debug(line);
+                }
+            }
+
+            // タイムアウト（必要に応じて変更）
+            boolean finished = proc.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
+            if (!finished) {
+                proc.destroyForcibly();
+                throw new RuntimeException("yt-dlp timed out (300s).");
+            }
+
+            int code = proc.exitValue();
+            if (code != 0) {
+                // 失敗時：部分ファイル掃除
+                safeDeleteIfEmpty(outFile);
+                String tail = tailOf(logBuf, 2000);
+                throw new RuntimeException("yt-dlp failed with exit code " + code + "\n--- output ---\n" + tail);
+            }
+
+            // 正常終了でも 0 バイト等は異常として扱う
+            if (!Files.isRegularFile(outFile) || Files.size(outFile) == 0) {
+                safeDeleteIfEmpty(outFile);
+                String tail = tailOf(logBuf, 2000);
+                throw new RuntimeException("yt-dlp finished but output not found or empty.\n--- output ---\n" + tail);
+            }
+
+            return outFile.toFile();
+
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to download audio via yt-dlp", e);
         }
-        return file.toFile();
+    }
+
+// --- helpers ---
+
+    private static void safeDeleteIfEmpty(Path p) {
+        try {
+            if (Files.isRegularFile(p) && Files.size(p) == 0) {
+                Files.deleteIfExists(p);
+            }
+        } catch (IOException ignored) {}
+    }
+
+    private static String tailOf(CharSequence sb, int max) {
+        int len = sb.length();
+        if (len <= max) return sb.toString();
+        return sb.subSequence(len - max, len).toString();
     }
 
     @Override

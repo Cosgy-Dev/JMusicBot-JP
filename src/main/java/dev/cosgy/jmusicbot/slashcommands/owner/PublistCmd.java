@@ -1,8 +1,8 @@
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.Command;
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import dev.cosgy.jmusicbot.playlist.MylistLoader;
 import dev.cosgy.jmusicbot.playlist.PubliclistLoader;
@@ -25,7 +25,7 @@ public class PublistCmd extends OwnerCommand {
 
     public PublistCmd(Bot bot) {
         this.bot = bot;
-        this.guildOnly = false;
+        //this.guildOnly = false;
         this.name = "publist";
         this.arguments = "<append|delete|make|all|show>";
         this.help = "再生リスト管理";
@@ -59,7 +59,7 @@ public class PublistCmd extends OwnerCommand {
             this.name = "setdefault";
             this.aliases = new String[]{"default"};
             this.arguments = "<playlistname|NONE>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
     }
 
@@ -68,7 +68,7 @@ public class PublistCmd extends OwnerCommand {
             this.name = "show";
             this.help = "指定した再生リスト内の曲を表示";
             this.arguments = "<name>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
 
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -143,7 +143,7 @@ public class PublistCmd extends OwnerCommand {
             this.aliases = new String[]{"create"};
             this.help = "新しい再生リストを作る";
             this.arguments = "<name>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
 
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -185,7 +185,7 @@ public class PublistCmd extends OwnerCommand {
             this.aliases = new String[]{"remove"};
             this.help = "既存の再生リストを削除します";
             this.arguments = "<name>";
-            this.guildOnly = false;
+            //this.guildOnly = false;
 
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -229,7 +229,7 @@ public class PublistCmd extends OwnerCommand {
             this.aliases = new String[]{"add"};
             this.help = "既存の再生リストに曲を追加します";
             this.arguments = "<name> <URL> | <URL> | ...";
-            this.guildOnly = false;
+            //this.guildOnly = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
             options.add(new OptionData(OptionType.STRING, "url", "URL", true));
@@ -297,7 +297,7 @@ public class PublistCmd extends OwnerCommand {
             this.name = "all";
             this.aliases = new String[]{"available", "list"};
             this.help = "利用可能なすべての再生リストを表示します。";
-            this.guildOnly = true;
+            //this.guildOnly = true;
         }
 
         @Override

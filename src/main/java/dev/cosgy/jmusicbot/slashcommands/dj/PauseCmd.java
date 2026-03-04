@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.dj;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.PlayStatus;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
@@ -48,6 +48,7 @@ public class PauseCmd extends DJCommand {
         handler.getPlayer().setPaused(true);
         log.info(event.getGuild().getName() + "で" + handler.getPlayer().getPlayingTrack().getInfo().title + "を一時停止しました。");
         event.replySuccess("**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**を一時停止にしました。 `" + event.getClient().getPrefix() + " play` を使用すると一時停止を解除できます。");
+        bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
 
         Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PAUSED);
     }
@@ -66,6 +67,7 @@ public class PauseCmd extends DJCommand {
         handler.getPlayer().setPaused(true);
         log.info(event.getGuild().getName() + "で" + handler.getPlayer().getPlayingTrack().getInfo().title + "を一時停止しました。");
         event.reply(event.getClient().getSuccess() + "**" + handler.getPlayer().getPlayingTrack().getInfo().title + "**を一時停止にしました。 `" + event.getClient().getPrefix() + " play` を使用すると一時停止を解除できます。").queue();
+        bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
 
         Bot.updatePlayStatus(event.getGuild(), event.getGuild().getSelfMember(), PlayStatus.PAUSED);
     }

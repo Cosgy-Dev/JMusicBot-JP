@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
@@ -38,7 +38,7 @@ public class EvalCmd extends OwnerCommand {
         this.name = "eval";
         this.help = "nashornコードを実行します";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         List<OptionData> options = new ArrayList<>();
         options.add(new OptionData(OptionType.STRING, "code", "実行するコード", true));
         this.options = options;

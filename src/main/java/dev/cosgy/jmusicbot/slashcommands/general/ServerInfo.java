@@ -1,8 +1,8 @@
 package dev.cosgy.jmusicbot.slashcommands.general;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import net.dv8tion.jda.api.EmbedBuilder;
 
@@ -13,7 +13,7 @@ public class ServerInfo extends SlashCommand {
     public ServerInfo(Bot bot) {
         this.name = "serverinfo";
         this.help = "サーバーに関する情報を表示します";
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.category = new Category("General");
         this.aliases = bot.getConfig().getAliases(this.name);
     }

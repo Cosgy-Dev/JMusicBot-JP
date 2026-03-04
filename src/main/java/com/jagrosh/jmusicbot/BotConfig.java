@@ -22,13 +22,19 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.typesafe.config.Config;
 import com.typesafe.config.ConfigException;
 import com.typesafe.config.ConfigFactory;
+import com.typesafe.config.ConfigRenderOptions;
+import com.typesafe.config.ConfigValue;
+import com.typesafe.config.parser.ConfigDocument;
+import com.typesafe.config.parser.ConfigDocumentFactory;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.entities.Activity;
 import org.apache.commons.io.FileUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 /**
  * @author John Grosh (jagrosh)
@@ -37,6 +43,7 @@ public class BotConfig {
     private final static String CONTEXT = "Config";
     private final static String START_TOKEN = "/// START OF JMUSICBOT-JP CONFIG ///";
     private final static String END_TOKEN = "/// END OF JMUSICBOT-JP CONFIG ///";
+    private final static String CONFIG_VERSION_KEY = "configversion";
     private final Prompt prompt;
     private Path path = null;
     // [JMusicBot-JP] added nicoEmail, nicoPass
@@ -57,6 +64,8 @@ public class BotConfig {
     private static String nicoTwoFactor;
     private String ytEmail;
     private String ytPass;
+    private boolean youtubeOauth2;
+    private String youtubeOauth2RefreshToken;
     private String spClientId;
     private String spClientSecret;
     // [JMusicBot-JP] added useNicoNico, changeNickName, pauseNoUsers, resumeJoined, stopNoUsers, cosgyDevHost, helpToDm, officialInvite
@@ -80,6 +89,11 @@ public class BotConfig {
             // 設定のパスを取得（デフォルトはconfig.txt)
             path = OtherUtil.getPath(System.getProperty("config.file", System.getProperty("config", "config.txt")));
             if (path.toFile().exists()) {
+                try {
+                    autoUpdateConfigIfNeeded();
+                } catch (Exception ex) {
+                    prompt.alert(Prompt.Level.WARNING, CONTEXT, "config.txt の自動更新に失敗したため、既存設定で起動します。\n理由: " + ex.getMessage());
+                }
                 if (System.getProperty("config.file") == null)
                     System.setProperty("config.file", System.getProperty("config", path.toAbsolutePath().toString()));
                 ConfigFactory.invalidateCaches();
@@ -132,6 +146,8 @@ public class BotConfig {
             useinvitecommand = config.getBoolean("useinvitecommand");
             ytEmail = config.getString("ytemail");
             ytPass = config.getString("ytpass");
+            youtubeOauth2 = config.getBoolean("youtubeoauth2");
+            youtubeOauth2RefreshToken = config.getString("youtubeoauth2refreshtoken");
             spClientId = config.getString("spclient");
             spClientSecret = config.getString("spsecret");
 
@@ -354,6 +370,14 @@ public class BotConfig {
         return ytPass;
     }
 
+    public boolean isYouTubeOauth2Enabled() {
+        return youtubeOauth2;
+    }
+
+    public String getYouTubeOauth2RefreshToken() {
+        return youtubeOauth2RefreshToken;
+    }
+
     public String getSpotifyClientId(){return spClientId;}
 
     public String getSpotifyClientSecret(){return spClientSecret;}
@@ -386,5 +410,44 @@ public class BotConfig {
 
     public boolean isUseInviteCommand() {
         return useinvitecommand;
+    }
+
+    private void autoUpdateConfigIfNeeded() throws IOException {
+        String template = extractTemplateConfig();
+        Config defaultConfig = ConfigFactory.parseString(template);
+        int latestVersion = defaultConfig.hasPath(CONFIG_VERSION_KEY) ? defaultConfig.getInt(CONFIG_VERSION_KEY) : 1;
+
+        Config oldConfig = ConfigFactory.parseFile(path.toFile());
+        int currentVersion = oldConfig.hasPath(CONFIG_VERSION_KEY) ? oldConfig.getInt(CONFIG_VERSION_KEY) : 0;
+        if (currentVersion >= latestVersion)
+            return;
+
+        Path backupPath = OtherUtil.getPath(path.toString() + ".v" + currentVersion + ".bak");
+        Files.copy(path, backupPath, StandardCopyOption.REPLACE_EXISTING);
+
+        ConfigDocument updatedDoc = ConfigDocumentFactory.parseString(template);
+        for (String entryPath : oldConfig.entrySet().stream().map(java.util.Map.Entry::getKey).toList()) {
+            if (!defaultConfig.hasPath(entryPath))
+                continue;
+            ConfigValue oldValue = oldConfig.getValue(entryPath);
+            updatedDoc = updatedDoc.withValueText(entryPath, oldValue.render(ConfigRenderOptions.concise()));
+        }
+
+        FileUtils.writeStringToFile(path.toFile(), updatedDoc.render(), StandardCharsets.UTF_8);
+        prompt.alert(Prompt.Level.INFO, CONTEXT, "config.txt を v" + currentVersion + " から v" + latestVersion
+                + " に自動更新しました。\nバックアップ: " + backupPath.toAbsolutePath());
+    }
+
+    private String extractTemplateConfig() throws IOException {
+        String original = OtherUtil.loadResource(this, "/reference.conf");
+        if (original == null) {
+            throw new IOException("reference.conf を読み込めませんでした。");
+        }
+        int start = original.indexOf(START_TOKEN);
+        int end = original.indexOf(END_TOKEN);
+        if (start < 0 || end < 0 || end <= start) {
+            throw new IOException("reference.conf のテンプレート範囲を特定できませんでした。");
+        }
+        return original.substring(start + START_TOKEN.length(), end).trim();
     }
 }

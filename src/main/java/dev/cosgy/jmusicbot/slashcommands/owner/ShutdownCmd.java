@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
 
@@ -31,7 +31,7 @@ public class ShutdownCmd extends OwnerCommand {
         this.name = "shutdown";
         this.help = "安全にシャットダウン";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
     }
 
     @Override

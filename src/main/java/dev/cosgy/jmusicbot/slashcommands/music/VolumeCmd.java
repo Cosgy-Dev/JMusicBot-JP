@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.settings.Settings;
@@ -66,6 +66,7 @@ public class VolumeCmd extends MusicCommand {
             else {
                 handler.getPlayer().setVolume(nvolume);
                 settings.setVolume(nvolume);
+                bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
                 event.reply(FormatUtil.volumeIcon(nvolume) + " 音量を`" + volume + "`から`" + nvolume + "`に変更しました。");
                 log.info(event.getGuild().getName() + "での音量が" + volume + "から" + nvolume + "に変更されました。");
             }
@@ -89,6 +90,7 @@ public class VolumeCmd extends MusicCommand {
         else {
             handler.getPlayer().setVolume(nvolume);
             settings.setVolume(nvolume);
+            bot.getNowplayingHandler().onTrackUpdate(event.getGuild().getIdLong(), handler.getPlayer().getPlayingTrack(), handler);
             event.reply(FormatUtil.volumeIcon(nvolume) + " 音量を`" + volume + "`から`" + nvolume + "`に変更しました。").queue();
             log.info(event.getGuild().getName() + "での音量が" + volume + "から" + nvolume + "に変更されました。");
         }

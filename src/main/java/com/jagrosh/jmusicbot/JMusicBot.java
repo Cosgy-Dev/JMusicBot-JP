@@ -16,10 +16,11 @@
 package com.jagrosh.jmusicbot;
 
 import com.github.lalyos.jfiglet.FigletFont;
-import com.jagrosh.jdautilities.command.Command;
-import com.jagrosh.jdautilities.command.CommandClientBuilder;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.commons.waiter.EventWaiter;
+import club.minnced.discord.jdave.interop.JDaveSessionFactory;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandClientBuilder;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.commons.waiter.EventWaiter;
 import com.jagrosh.jmusicbot.entities.Prompt;
 import com.jagrosh.jmusicbot.gui.GUI;
 import com.jagrosh.jmusicbot.settings.SettingsManager;
@@ -29,12 +30,14 @@ import dev.cosgy.jmusicbot.slashcommands.admin.*;
 import dev.cosgy.jmusicbot.slashcommands.dj.*;
 import dev.cosgy.jmusicbot.slashcommands.general.*;
 import dev.cosgy.jmusicbot.slashcommands.listeners.CommandAudit;
+import dev.cosgy.jmusicbot.slashcommands.listeners.buttons.QueueButtonListener;
 import dev.cosgy.jmusicbot.slashcommands.music.*;
 import dev.cosgy.jmusicbot.slashcommands.owner.*;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
 import net.dv8tion.jda.api.OnlineStatus;
 import net.dv8tion.jda.api.Permission;
+import net.dv8tion.jda.api.audio.AudioModuleConfig;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.exceptions.InvalidTokenException;
 import net.dv8tion.jda.api.requests.GatewayIntent;
@@ -66,6 +69,24 @@ public class JMusicBot {
     public static boolean COMMAND_AUDIT_ENABLED = false;
 
     /**
+     * DAVE音声暗号化設定を構築します。
+     * 初期化に失敗した場合はnullを返し、既存暗号方式にフォールバックします。
+     */
+    private static AudioModuleConfig createDaveAudioModuleConfig(Logger log, Prompt prompt) {
+        try {
+            AudioModuleConfig config = new AudioModuleConfig()
+                    .withDaveSessionFactory(new JDaveSessionFactory());
+            log.info("DAVE音声暗号化を有効化しました。");
+            return config;
+        } catch (Throwable t) {
+            log.warn("DAVE音声暗号化の初期化に失敗しました。従来方式で継続します: {}", t.toString());
+            prompt.alert(Prompt.Level.WARNING, "DAVE",
+                    "DAVEの初期化に失敗したため、従来の音声暗号化方式で継続します。詳細: " + t.getClass().getSimpleName());
+            return null;
+        }
+    }
+
+    /**
      * @param args the command line arguments
      */
     public static void main(String[] args) {
@@ -86,7 +107,8 @@ public class JMusicBot {
         for (String arg : args)
             if ("-nogui".equalsIgnoreCase(arg)) {
                 prompt.alert(Prompt.Level.WARNING, "GUI", "-noguiフラグは廃止予定です。 "
-                        + "jarの名前の前に-Dnogui = trueフラグを使用してください。 例：java -jar -Dnogui=true JMusicBot.jar");
+                        + "jarの名前の前に-Dnogui = trueフラグを使用してください。 "
+                        + "例：java --enable-native-access=ALL-UNNAMED -Dnogui=true -jar JMusicBot.jar");
             } else if ("-nocheckupdates".equalsIgnoreCase(arg)) {
                 CHECK_UPDATE = false;
                 log.info("アップデートチェックを無効にしました");
@@ -100,29 +122,6 @@ public class JMusicBot {
 
         if (!System.getProperty("java.vm.name").contains("64"))
             prompt.alert(Prompt.Level.WARNING, "Java Version", "サポートされていないJavaバージョンを使用しています。64ビット版のJavaを使用してください。");
-
-        try {
-            Process checkPython3 = Runtime.getRuntime().exec("python3 --version");
-            int python3ExitCode = checkPython3.waitFor();
-
-            if (python3ExitCode != 0) {
-                log.info("Python3 is not installed. Checking for python.");
-                Process checkPython = Runtime.getRuntime().exec("python --version");
-                BufferedReader reader = new BufferedReader(new InputStreamReader(checkPython.getInputStream()));
-                String pythonVersion = reader.readLine();
-                int pythonExitCode = checkPython.waitFor();
-
-                if (pythonExitCode == 0 && pythonVersion != null && pythonVersion.startsWith("Python 3")) {
-                    log.info("Python is version 3.x.");
-                } else {
-                    prompt.alert(Prompt.Level.WARNING, "Python", "Python (バージョン3.x)がインストールされていません。Python 3をインストールしてください。");
-                }
-            } else {
-                log.info("Python3 is installed.");
-            }
-        } catch (Exception e) {
-            prompt.alert(Prompt.Level.WARNING, "Python", "Pythonのバージョン確認中にエラーが発生しました。Python3がインストールされているか確認してください。");
-        }
 
 
 
@@ -233,7 +232,6 @@ public class JMusicBot {
         }};
 
         cb.addCommands(slashCommandList.toArray(new Command[0]));
-        cb.addSlashCommands(slashCommandList.toArray(new SlashCommand[0]));
 
         if (config.useEval())
             cb.addCommand(new EvalCmd(bot));
@@ -264,13 +262,20 @@ public class JMusicBot {
 
         // attempt to log in and start
         try {
-            JDA jda = JDABuilder.create(config.getToken(), Arrays.asList(INTENTS))
+            JDABuilder jdaBuilder = JDABuilder.create(config.getToken(), Arrays.asList(INTENTS))
                     .enableCache(CacheFlag.MEMBER_OVERRIDES, CacheFlag.VOICE_STATE)
                     .disableCache(CacheFlag.ACTIVITY, CacheFlag.CLIENT_STATUS, CacheFlag.EMOJI, CacheFlag.ONLINE_STATUS)
                     .setActivity(nogame ? null : Activity.playing("ロード中..."))
                     .setStatus(config.getStatus() == OnlineStatus.INVISIBLE || config.getStatus() == OnlineStatus.OFFLINE
-                            ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB)
-                    .addEventListeners(cb.build(), waiter, new Listener(bot))
+                            ? OnlineStatus.INVISIBLE : OnlineStatus.DO_NOT_DISTURB);
+
+            AudioModuleConfig daveConfig = createDaveAudioModuleConfig(log, prompt);
+            if (daveConfig != null) {
+                jdaBuilder.setAudioModuleConfig(daveConfig);
+            }
+
+            JDA jda = jdaBuilder
+                    .addEventListeners(cb.build(), waiter, new Listener(bot),new QueueButtonListener(bot))
                     .setBulkDeleteSplittingEnabled(true)
                     .build();
             bot.setJDA(jda);

@@ -15,12 +15,12 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.general;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommand;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
-import com.jagrosh.jdautilities.commons.JDAUtilitiesInfo;
-import com.jagrosh.jdautilities.doc.standard.CommandInfo;
-import com.jagrosh.jdautilities.examples.doc.Author;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.commons.JDAUtilitiesInfo;
+import dev.cosgy.jmusicbot.framework.jdautilities.doc.standard.CommandInfo;
+import dev.cosgy.jmusicbot.framework.jdautilities.examples.doc.Author;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDAInfo;
 import net.dv8tion.jda.api.Permission;
@@ -56,7 +56,7 @@ public class AboutCommand extends SlashCommand {
         this.name = "about";
         this.help = "ボットに関する情報を表示します";
         this.aliases = new String[]{"botinfo", "info"};
-        this.guildOnly = false;
+        //this.guildOnly = false;
         this.perms = perms;
         this.botPermissions = new Permission[]{Permission.MESSAGE_EMBED_LINKS};
     }

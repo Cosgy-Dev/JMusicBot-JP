@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.QueuedTrack;
@@ -44,7 +44,7 @@ public class PlaylistsCmd extends MusicCommand {
         this.help = "利用可能な再生リストを表示します";
         this.arguments = "<play|append|delete|make|show>";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.beListening = false;
         this.children = new MusicCommand[]{
                 new PlayCmd(bot),
@@ -117,7 +117,6 @@ public class PlaylistsCmd extends MusicCommand {
             options.add(new OptionData(OptionType.STRING, "name", "マイリスト名", true));
             this.options = options;
         }
-
         @Override
         public void doCommand(CommandEvent event) {
             playPlaylist(event.getGuild().getId(), event.getArgs(), event, null);
@@ -175,7 +174,7 @@ public class PlaylistsCmd extends MusicCommand {
             this.name = "show";
             this.help = "指定した再生リスト内の曲を表示";
             this.arguments = "<name>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
 
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -253,7 +252,7 @@ public class PlaylistsCmd extends MusicCommand {
             this.aliases = new String[]{"create"};
             this.help = "再生リストを新規作成";
             this.arguments = "<name>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
 
             List<OptionData> options = new ArrayList<>();
@@ -325,7 +324,7 @@ public class PlaylistsCmd extends MusicCommand {
             this.aliases = new String[]{"remove"};
             this.help = "既存の再生リストを削除";
             this.arguments = "<name>";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -381,7 +380,7 @@ public class PlaylistsCmd extends MusicCommand {
             this.aliases = new String[]{"add"};
             this.help = "既存の再生リストに曲を追加";
             this.arguments = "<name> <URL>| <URL> | ...";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
             List<OptionData> options = new ArrayList<>();
             options.add(new OptionData(OptionType.STRING, "name", "プレイリスト名", true));
@@ -459,7 +458,7 @@ public class PlaylistsCmd extends MusicCommand {
             this.name = "all";
             this.aliases = new String[]{"available", "list"};
             this.help = "利用可能なすべての再生リストを表示";
-            this.guildOnly = true;
+            //this.guildOnly = true;
             this.ownerCommand = false;
         }
 

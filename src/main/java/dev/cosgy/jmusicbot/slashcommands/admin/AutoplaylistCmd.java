@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.admin;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.settings.Settings;
 import dev.cosgy.jmusicbot.slashcommands.AdminCommand;
@@ -34,7 +34,7 @@ public class AutoplaylistCmd extends AdminCommand {
 
     public AutoplaylistCmd(Bot bot) {
         this.bot = bot;
-        this.guildOnly = true;
+        //this.guildOnly = true;
         this.name = "autoplaylist";
         this.arguments = "<name|NONE|なし>";
         this.aliases = bot.getConfig().getAliases(this.name);

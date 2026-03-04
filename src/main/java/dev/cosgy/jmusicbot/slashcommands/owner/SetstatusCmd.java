@@ -15,8 +15,8 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.owner;
 
-import com.jagrosh.jdautilities.command.CommandEvent;
-import com.jagrosh.jdautilities.command.SlashCommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
+import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
 import dev.cosgy.jmusicbot.slashcommands.OwnerCommand;
 import net.dv8tion.jda.api.OnlineStatus;
@@ -35,7 +35,7 @@ public class SetstatusCmd extends OwnerCommand {
         this.help = "ボットが表示するステータスを設定します";
         this.arguments = "<status>";
         this.aliases = bot.getConfig().getAliases(this.name);
-        this.guildOnly = false;
+        //this.guildOnly = false;
         List<OptionData> options = new ArrayList<>();
         options.add(new OptionData(OptionType.STRING, "status", "次のいずれかのステータス：ONLINE, IDLE, DND, INVISIBLE", true));
         this.options = options;
