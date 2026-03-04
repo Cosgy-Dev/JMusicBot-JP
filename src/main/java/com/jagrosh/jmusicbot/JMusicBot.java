@@ -232,7 +232,6 @@ public class JMusicBot {
         }};
 
         cb.addCommands(slashCommandList.toArray(new Command[0]));
-        cb.addSlashCommands(slashCommandList.toArray(new SlashCommand[0]));
 
         if (config.useEval())
             cb.addCommand(new EvalCmd(bot));
