@@ -1,33 +1,22 @@
 pipeline {
-    agent any
-
-    options {
-        timestamps()
-        disableConcurrentBuilds()
-        buildDiscarder(logRotator(numToKeepStr: '30'))
+  agent any
+  stages {
+    stage('Checkout') {
+      steps {
+        checkout scm
+      }
     }
 
-    environment {
-        MAVEN_OPTS = '-Xmx3200m'
+    stage('Build and Test') {
+      steps {
+        sh 'mvn --version'
+        sh 'mvn --batch-mode --update-snapshots clean verify'
+      }
     }
 
-    stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-
-        stage('Build and Test') {
-            steps {
-                sh 'mvn --version'
-                sh 'mvn --batch-mode --update-snapshots clean verify'
-            }
-        }
-
-        stage('Publish Artifacts') {
-            steps {
-                sh '''
+    stage('Publish Artifacts') {
+      steps {
+        sh '''
                     set -eu
                     ARTIFACTS="$(ls -1 target/*.jar 2>/dev/null || true)"
                     if [ -z "$ARTIFACTS" ]; then
@@ -44,14 +33,23 @@ pipeline {
                       echo "Use Jenkins archived artifacts URL for download."
                     fi
                 '''
-            }
-        }
+      }
     }
 
-    post {
-        always {
-            junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
-            archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
-        }
+  }
+  environment {
+    MAVEN_OPTS = '-Xmx3200m'
+  }
+  post {
+    always {
+      junit(testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true)
+      archiveArtifacts(artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true)
     }
+
+  }
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+    buildDiscarder(logRotator(numToKeepStr: '30'))
+  }
 }
