@@ -23,6 +23,31 @@ pipeline {
                 sh '''
                     set -eu
 
+                    JAVA_MAJOR="$(java -version 2>&1 | awk -F[\\".] '/version/ {print $2; exit}' || true)"
+                    if [ "${JAVA_MAJOR:-0}" -lt 25 ]; then
+                      JDK_BASE="$WORKSPACE/.jdk"
+                      JDK_DIR="$JDK_BASE/temurin-25"
+                      JDK_ARCHIVE="OpenJDK25U-jdk_x64_linux_hotspot_25.0.2_10.tar.gz"
+                      JDK_URL="https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.2%2B10/$JDK_ARCHIVE"
+
+                      mkdir -p "$JDK_BASE"
+                      if [ ! -x "$JDK_DIR/bin/java" ]; then
+                        if command -v curl >/dev/null 2>&1; then
+                          curl -fsSL "$JDK_URL" -o "$JDK_BASE/$JDK_ARCHIVE"
+                        elif command -v wget >/dev/null 2>&1; then
+                          wget -q "$JDK_URL" -O "$JDK_BASE/$JDK_ARCHIVE"
+                        else
+                          echo "Neither curl nor wget is available to download JDK 25." >&2
+                          exit 1
+                        fi
+                        mkdir -p "$JDK_DIR"
+                        tar -xzf "$JDK_BASE/$JDK_ARCHIVE" -C "$JDK_DIR" --strip-components=1
+                      fi
+
+                      export JAVA_HOME="$JDK_DIR"
+                      export PATH="$JAVA_HOME/bin:$PATH"
+                    fi
+
                     if command -v mvn >/dev/null 2>&1; then
                       MVN_CMD="mvn"
                     else
@@ -47,6 +72,7 @@ pipeline {
                       MVN_CMD="$MAVEN_DIR/bin/mvn"
                     fi
 
+                    java -version
                     "$MVN_CMD" --version
                     "$MVN_CMD" --batch-mode --update-snapshots clean verify
                 '''
