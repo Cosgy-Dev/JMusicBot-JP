@@ -9,6 +9,10 @@ pipeline {
 
     environment {
         MAVEN_OPTS = '-Xmx3200m'
+        GCS_BUCKET = 'gs://cosgy-dev-ci'
+        GCS_CREDENTIALS_ID = '766d2a9f-efdf-4be1-a6c8-87bc547f40dc'
+        GCS_TTL_DAYS = '365'
+        GCS_SHARED_PUBLICLY = 'true'
     }
 
     stages {
@@ -23,6 +27,19 @@ pipeline {
                 sh '''
                     set -eu
 
+                    download_file() {
+                      URL="$1"
+                      OUT="$2"
+                      if command -v curl >/dev/null 2>&1; then
+                        curl -fsSL "$URL" -o "$OUT"
+                      elif command -v wget >/dev/null 2>&1; then
+                        wget -q "$URL" -O "$OUT"
+                      else
+                        echo "Neither curl nor wget is available to download: $URL" >&2
+                        exit 1
+                      fi
+                    }
+
                     JAVA_MAJOR="$(java -version 2>&1 | awk -F[\\".] '/version/ {print $2; exit}' || true)"
                     if [ "${JAVA_MAJOR:-0}" -lt 25 ]; then
                       JDK_BASE="$WORKSPACE/.jdk"
@@ -32,14 +49,7 @@ pipeline {
 
                       mkdir -p "$JDK_BASE"
                       if [ ! -x "$JDK_DIR/bin/java" ]; then
-                        if command -v curl >/dev/null 2>&1; then
-                          curl -fsSL "$JDK_URL" -o "$JDK_BASE/$JDK_ARCHIVE"
-                        elif command -v wget >/dev/null 2>&1; then
-                          wget -q "$JDK_URL" -O "$JDK_BASE/$JDK_ARCHIVE"
-                        else
-                          echo "Neither curl nor wget is available to download JDK 25." >&2
-                          exit 1
-                        fi
+                        download_file "$JDK_URL" "$JDK_BASE/$JDK_ARCHIVE"
                         mkdir -p "$JDK_DIR"
                         tar -xzf "$JDK_BASE/$JDK_ARCHIVE" -C "$JDK_DIR" --strip-components=1
                       fi
@@ -59,14 +69,7 @@ pipeline {
 
                       mkdir -p "$MAVEN_BASE"
                       if [ ! -x "$MAVEN_DIR/bin/mvn" ]; then
-                        if command -v curl >/dev/null 2>&1; then
-                          curl -fsSL "$MAVEN_URL" -o "$MAVEN_BASE/$MAVEN_ARCHIVE"
-                        elif command -v wget >/dev/null 2>&1; then
-                          wget -q "$MAVEN_URL" -O "$MAVEN_BASE/$MAVEN_ARCHIVE"
-                        else
-                          echo "Neither curl nor wget is available to download Maven." >&2
-                          exit 1
-                        fi
+                        download_file "$MAVEN_URL" "$MAVEN_BASE/$MAVEN_ARCHIVE"
                         tar -xzf "$MAVEN_BASE/$MAVEN_ARCHIVE" -C "$MAVEN_BASE"
                       fi
                       MVN_CMD="$MAVEN_DIR/bin/mvn"
@@ -102,24 +105,14 @@ pipeline {
         }
 
         stage('Upload to GCS') {
-            when {
-                expression {
-                    return env.GCS_BUCKET?.trim() && env.GCS_CREDENTIALS_ID?.trim()
-                }
-            }
             steps {
-                step([
-                    $class: 'ClassicUploadStep',
-                    credentialsId: env.GCS_CREDENTIALS_ID,
-                    bucket: "gs://${env.GCS_BUCKET}",
-                    pattern: 'target/*.jar'
-                ])
-                step([
-                    $class: 'ClassicUploadStep',
-                    credentialsId: env.GCS_CREDENTIALS_ID,
-                    bucket: "gs://${env.GCS_BUCKET}",
-                    pattern: 'target/surefire-reports/*.xml'
-                ])
+                googleStorageUpload bucket: env.GCS_BUCKET, credentialsId: env.GCS_CREDENTIALS_ID, pattern: 'target/*.jar', sharedPublicly: env.GCS_SHARED_PUBLICLY.toBoolean()
+            }
+        }
+
+        stage('Configure GCS Lifecycle') {
+            steps {
+                googleStorageBucketLifecycle bucket: env.GCS_BUCKET, credentialsId: env.GCS_CREDENTIALS_ID, ttl: env.GCS_TTL_DAYS as int
             }
         }
     }
@@ -128,18 +121,13 @@ pipeline {
         always {
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
-            script {
-                if (env.GCS_BUCKET?.trim() && env.GCS_CREDENTIALS_ID?.trim()) {
-                    step([
-                        $class: 'StdoutUploadStep',
-                        credentialsId: env.GCS_CREDENTIALS_ID,
-                        bucket: "gs://${env.GCS_BUCKET}",
-                        logName: "${env.JOB_NAME}/${env.BUILD_NUMBER}/build.log"
-                    ])
-                } else {
-                    echo 'GCS_BUCKET or GCS_CREDENTIALS_ID is not set. Skipping GCS build log upload.'
-                }
-            }
+            step([
+                $class: 'StdoutUploadStep',
+                credentialsId: env.GCS_CREDENTIALS_ID,
+                bucket: env.GCS_BUCKET,
+                logName: "$JOB_NAME/$BUILD_NUMBER/build.log",
+                sharedPublicly: env.GCS_SHARED_PUBLICLY.toBoolean()
+            ])
         }
     }
 }
