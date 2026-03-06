@@ -100,12 +100,46 @@ pipeline {
                 '''
             }
         }
+
+        stage('Upload to GCS') {
+            when {
+                expression {
+                    return env.GCS_BUCKET?.trim() && env.GCS_CREDENTIALS_ID?.trim()
+                }
+            }
+            steps {
+                step([
+                    $class: 'ClassicUploadStep',
+                    credentialsId: env.GCS_CREDENTIALS_ID,
+                    bucket: "gs://${env.GCS_BUCKET}",
+                    pattern: 'target/*.jar'
+                ])
+                step([
+                    $class: 'ClassicUploadStep',
+                    credentialsId: env.GCS_CREDENTIALS_ID,
+                    bucket: "gs://${env.GCS_BUCKET}",
+                    pattern: 'target/surefire-reports/*.xml'
+                ])
+            }
+        }
     }
 
     post {
         always {
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
+            script {
+                if (env.GCS_BUCKET?.trim() && env.GCS_CREDENTIALS_ID?.trim()) {
+                    step([
+                        $class: 'StdoutUploadStep',
+                        credentialsId: env.GCS_CREDENTIALS_ID,
+                        bucket: "gs://${env.GCS_BUCKET}",
+                        logName: "${env.JOB_NAME}/${env.BUILD_NUMBER}/build.log"
+                    ])
+                } else {
+                    echo 'GCS_BUCKET or GCS_CREDENTIALS_ID is not set. Skipping GCS build log upload.'
+                }
+            }
         }
     }
 }
