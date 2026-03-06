@@ -41,6 +41,17 @@ Javaがインストールされていない場合は、[こちら](https://www.o
 Dockerを使用してJavaのインストールなどを行わずにこのボットを自分で起動することができます。
 Dockerを使用する場合は、[こちら](https://hub.docker.com/r/cyberrex/jmusicbot-jp) を参照してください。
 
+# Jenkins CI (ci.cosgy.dev)
+
+このリポジトリには `Jenkinsfile` が含まれています。  
+Jenkins の Pipeline ジョブでこのリポジトリを指定すると、以下を実行します。
+
+* `mvn --batch-mode --update-snapshots clean verify`
+* `target/*.jar` のアーカイブ公開
+* `PUBLISH_DIR` 環境変数が設定されている場合は、指定ディレクトリへ成果物をコピー
+
+成果物は Jenkins のビルド画面からダウンロードできます。
+
 # 注意
 
 このボットは公開ボットとして使用することはできません。
