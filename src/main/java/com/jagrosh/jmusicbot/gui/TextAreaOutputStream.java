@@ -28,12 +28,8 @@ import java.util.List;
  */
 public class TextAreaOutputStream extends OutputStream {
 
-// *************************************************************************************************
-// INSTANCE MEMBERS
-// *************************************************************************************************
-
-    private final byte[] oneByte;                                                // array for write(int val);
-    private Appender appender;                                                   // most recent action
+    private final byte[] oneByte;
+    private Appender appender;
 
     public TextAreaOutputStream(JTextArea txtara) {
         this(txtara, 1000);
@@ -47,13 +43,12 @@ public class TextAreaOutputStream extends OutputStream {
         appender = new Appender(txtara, maxlin);
     }
 
-    //@edu.umd.cs.findbugs.annotations.SuppressWarnings("DM_DEFAULT_ENCODING")
-    static private String bytesToString(byte[] ba, int str, int len) {
+    private static String bytesToString(byte[] ba, int str, int len) {
         try {
             return new String(ba, str, len, System.getProperty("file.encoding"));
         } catch (UnsupportedEncodingException thr) {
             return new String(ba, str, len);
-        } // all JVMs are required to support UTF-8
+        }
     }
 
     /**
@@ -63,6 +58,16 @@ public class TextAreaOutputStream extends OutputStream {
         if (appender != null) {
             appender.clear();
         }
+    }
+
+    public synchronized void setPaused(boolean paused) {
+        if (appender != null) {
+            appender.setPaused(paused);
+        }
+    }
+
+    public synchronized boolean isPaused() {
+        return appender != null && appender.isPaused();
     }
 
     @Override
@@ -93,36 +98,38 @@ public class TextAreaOutputStream extends OutputStream {
         }
     }
 
-// *************************************************************************************************
-// STATIC MEMBERS
-// *************************************************************************************************
-
-    static class Appender
-            implements Runnable {
-        static private final String EOL1 = "\n";
-        static private final String EOL2 = System.getProperty("line.separator", EOL1);
+    static class Appender implements Runnable {
+        private static final String EOL1 = "\n";
+        private static final String EOL2 = System.getProperty("line.separator", EOL1);
 
         private final JTextArea textArea;
-        private final int maxLines;                                                   // maximum lines allowed in text area
-        private final LinkedList<Integer> lengths;                                    // length of lines within text area
-        private final List<String> values;                                            // values waiting to be appended
+        private final int maxLines;
+        private final LinkedList<Integer> lengths;
+        private final List<String> values;
+        private final List<String> pausedValues;
 
-        private int curLength;                                                        // length of current line
+        private int curLength;
         private boolean clear;
         private boolean queue;
+        private boolean paused;
 
         Appender(JTextArea txtara, int maxlin) {
             textArea = txtara;
             maxLines = maxlin;
             lengths = new LinkedList<>();
             values = new ArrayList<>();
-
+            pausedValues = new ArrayList<>();
             curLength = 0;
             clear = false;
             queue = true;
+            paused = false;
         }
 
         private synchronized void append(String val) {
+            if (paused) {
+                pausedValues.add(val);
+                return;
+            }
             values.add(val);
             if (queue) {
                 queue = false;
@@ -135,32 +142,51 @@ public class TextAreaOutputStream extends OutputStream {
             curLength = 0;
             lengths.clear();
             values.clear();
+            pausedValues.clear();
             if (queue) {
                 queue = false;
                 EventQueue.invokeLater(this);
             }
         }
 
-        // MUST BE THE ONLY METHOD THAT TOUCHES textArea!
+        private synchronized void setPaused(boolean pause) {
+            if (this.paused == pause) {
+                return;
+            }
+            this.paused = pause;
+            if (!pause && !pausedValues.isEmpty()) {
+                values.addAll(pausedValues);
+                pausedValues.clear();
+                if (queue) {
+                    queue = false;
+                    EventQueue.invokeLater(this);
+                }
+            }
+        }
+
+        private synchronized boolean isPaused() {
+            return paused;
+        }
+
         @Override
         public synchronized void run() {
             if (clear) {
                 textArea.setText("");
             }
-            values.stream()
-                    .peek((val) -> curLength += val.length())
-                    .peek((val) -> {
-                        if (val.endsWith(EOL1) || val.endsWith(EOL2)) {
-                            if (lengths.size() >= maxLines) {
-                                textArea.replaceRange("", 0, lengths.removeFirst());
-                            }
-                            lengths.addLast(curLength);
-                            curLength = 0;
-                        }
-                    }).forEach(textArea::append);
+            for (String val : values) {
+                curLength += val.length();
+                if (val.endsWith(EOL1) || val.endsWith(EOL2)) {
+                    if (lengths.size() >= maxLines) {
+                        textArea.replaceRange("", 0, lengths.removeFirst());
+                    }
+                    lengths.addLast(curLength);
+                    curLength = 0;
+                }
+                textArea.append(val);
+            }
             values.clear();
             clear = false;
             queue = true;
         }
     }
-} /* END PUBLIC CLASS */
+}
