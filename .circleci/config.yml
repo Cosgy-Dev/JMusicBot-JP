@@ -19,7 +19,7 @@ jobs:
 
       - run:
           name: Resolve dependencies
-          command: ./mvnw --batch-mode dependency:go-offline
+          command: mvn --batch-mode dependency:go-offline
 
       - save_cache:
           paths:
@@ -28,7 +28,7 @@ jobs:
 
       - run:
           name: Build and test
-          command: ./mvnw --batch-mode --update-snapshots verify
+          command: mvn --batch-mode --update-snapshots verify
 
 workflows:
   build:
