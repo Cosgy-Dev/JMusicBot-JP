@@ -9,10 +9,6 @@ pipeline {
 
     environment {
         MAVEN_OPTS = '-Xmx3200m'
-        GCS_BUCKET = 'gs://cosgy-dev-ci'
-        GCS_CREDENTIALS_ID = '766d2a9f-efdf-4be1-a6c8-87bc547f40dc'
-        GCS_TTL_DAYS = '365'
-        GCS_SHARED_PUBLICLY = 'true'
     }
 
     stages {
@@ -104,30 +100,12 @@ pipeline {
             }
         }
 
-        stage('Upload to GCS') {
-            steps {
-                googleStorageUpload bucket: env.GCS_BUCKET, credentialsId: env.GCS_CREDENTIALS_ID, pattern: 'target/*.jar', sharedPublicly: env.GCS_SHARED_PUBLICLY.toBoolean()
-            }
-        }
-
-        stage('Configure GCS Lifecycle') {
-            steps {
-                googleStorageBucketLifecycle bucket: env.GCS_BUCKET, credentialsId: env.GCS_CREDENTIALS_ID, ttl: env.GCS_TTL_DAYS as int
-            }
-        }
     }
 
     post {
         always {
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
-            step([
-                $class: 'StdoutUploadStep',
-                credentialsId: env.GCS_CREDENTIALS_ID,
-                bucket: env.GCS_BUCKET,
-                logName: "$JOB_NAME/$BUILD_NUMBER/build.log",
-                sharedPublicly: env.GCS_SHARED_PUBLICLY.toBoolean()
-            ])
         }
     }
 }
