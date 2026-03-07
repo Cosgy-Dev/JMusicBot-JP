@@ -83,7 +83,7 @@
         <dependency>
             <groupId>com.github.Cosgy-Dev</groupId>
             <artifactId>JLyrics</artifactId>
-            <version>0.5</version>
+            <version>v0.8</version>
         </dependency>
         <dependency>
             <groupId>ch.qos.logback</groupId>
