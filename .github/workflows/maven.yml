@@ -5,6 +5,7 @@ on:
     branches: [ develop, master ]
   pull_request:
     branches: [ develop, master ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -19,5 +20,11 @@ jobs:
           distribution: 'temurin'
           architecture: x64
           cache: maven
-      - name: Build with Maven
-        run: mvn --batch-mode --update-snapshots verify
+      - name: Run Unit Tests
+        run: ./mvn --batch-mode --update-snapshots test
+      - name: Upload Surefire Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports

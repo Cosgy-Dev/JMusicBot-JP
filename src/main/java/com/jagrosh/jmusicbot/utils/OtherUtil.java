@@ -149,7 +149,7 @@ public class OtherUtil {
         if (status == null || status.trim().isEmpty())
             return OnlineStatus.ONLINE;
         OnlineStatus st = OnlineStatus.fromKey(status);
-        return st == null ? OnlineStatus.ONLINE : st;
+        return st == null || st == OnlineStatus.UNKNOWN ? OnlineStatus.ONLINE : st;
     }
 
     public static String checkVersion(Prompt prompt) {
