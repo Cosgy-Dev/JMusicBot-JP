@@ -33,6 +33,7 @@ JMusicBotは、シンプルでかつ操作性の良いUIを使用しています
 
 このボットはJava25以上のバージョンが必要です。
 Javaがインストールされていない場合は、[こちら](https://www.oracle.com/jp/java/technologies/downloads/) からダウンロードしてください。
+また、音声抽出・変換のために `ffmpeg` / `ffprobe` を実行環境にインストールしてください（jarへの同梱は行いません）。
 このボットを自分で起動するには [Cosgy Dev 公式ページ](https://www.cosgy.dev/2019/09/06/jmusicbot-setup/) を参照してください
 また、DAVEを使用するため、起動時には `--enable-native-access=ALL-UNNAMED` の付与を推奨します。
 

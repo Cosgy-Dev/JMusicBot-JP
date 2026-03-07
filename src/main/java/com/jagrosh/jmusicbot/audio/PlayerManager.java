@@ -55,6 +55,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
     }
 
     public void init() {
+        verifyFfmpegAvailability();
+
         try {
             Path botDir = Paths.get("").toAbsolutePath();
             YtDlpManager y = new YtDlpManager(botDir);
@@ -95,6 +97,38 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         if (getConfiguration().getResamplingQuality() != AudioConfiguration.ResamplingQuality.HIGH) {
             logger.debug("ResamplingQuality を HIGH に設定（旧: {}）", getConfiguration().getResamplingQuality().name());
             getConfiguration().setResamplingQuality(AudioConfiguration.ResamplingQuality.HIGH);
+        }
+    }
+
+    private void verifyFfmpegAvailability() {
+        boolean ffmpegOk = isCommandAvailable("ffmpeg");
+        boolean ffprobeOk = isCommandAvailable("ffprobe");
+        if (ffmpegOk && ffprobeOk) {
+            logger.info("ffmpeg / ffprobe を検出しました。外部コマンドを使用します。");
+            return;
+        }
+
+        if (!ffmpegOk) {
+            logger.warn("ffmpeg が見つかりません。実行環境へ ffmpeg をインストールしてください。");
+        }
+        if (!ffprobeOk) {
+            logger.warn("ffprobe が見つかりません。実行環境へ ffprobe をインストールしてください。");
+        }
+        logger.warn("一部ソースの音声変換・抽出が失敗する可能性があります。");
+    }
+
+    private boolean isCommandAvailable(String command) {
+        try {
+            Process process = new ProcessBuilder(command, "-version")
+                    .redirectErrorStream(true)
+                    .start();
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return false;
+            }
+            return process.exitValue() == 0;
+        } catch (Exception ignored) {
+            return false;
         }
     }
 
