@@ -39,7 +39,11 @@ public class PubliclistLoader {
     public List<String> getPlaylistNames() {
         if (folderExists()) {
             File folder = new File(config.getPublistFolder());
-            return Arrays.stream(Objects.requireNonNull(folder.listFiles((pathname) -> pathname.getName().endsWith(".txt"))))
+            File[] files = folder.listFiles((pathname) -> pathname.getName().endsWith(".txt"));
+            if (files == null) {
+                return Collections.emptyList();
+            }
+            return Arrays.stream(files)
                     .map(f -> f.getName().substring(0, f.getName().length() - 4))
                     .collect(Collectors.toList());
         } else {

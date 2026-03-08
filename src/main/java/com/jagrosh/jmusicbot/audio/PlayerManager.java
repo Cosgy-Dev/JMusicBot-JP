@@ -49,6 +49,9 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
     // yt-dlp
     private Path ytDlpPath;
+    private volatile String ytDlpVersion;
+    private volatile boolean ffmpegAvailable;
+    private volatile boolean ffprobeAvailable;
 
     public PlayerManager(Bot bot) {
         this.bot = bot;
@@ -61,11 +64,16 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             Path botDir = Paths.get("").toAbsolutePath();
             YtDlpManager y = new YtDlpManager(botDir);
             this.ytDlpPath = y.prepare();
+            this.ytDlpVersion = probeYtDlpVersion();
             y.startAutoUpdate(Duration.ofHours(6));
             logger.info("yt-dlp ready at {}", ytDlpPath);
+            if (ytDlpVersion != null) {
+                logger.info("yt-dlp version detected: {}", ytDlpVersion);
+            }
         } catch (Exception e) {
             logger.error("yt-dlp の初期化に失敗。YouTubeフォールバックは無効化されます。", e);
             this.ytDlpPath = null;
+            this.ytDlpVersion = null;
         }
 
         // ==== ソース登録 ====
@@ -103,6 +111,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
     private void verifyFfmpegAvailability() {
         boolean ffmpegOk = isCommandAvailable("ffmpeg");
         boolean ffprobeOk = isCommandAvailable("ffprobe");
+        this.ffmpegAvailable = ffmpegOk;
+        this.ffprobeAvailable = ffprobeOk;
         if (ffmpegOk && ffprobeOk) {
             logger.info("ffmpeg / ffprobe を検出しました。外部コマンドを使用します。");
             return;
@@ -129,6 +139,54 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             return process.exitValue() == 0;
         } catch (Exception ignored) {
             return false;
+        }
+    }
+
+    public boolean isFfmpegAvailable() {
+        return ffmpegAvailable;
+    }
+
+    public boolean isFfprobeAvailable() {
+        return ffprobeAvailable;
+    }
+
+    public String getYtDlpVersion() {
+        String latest = probeYtDlpVersion();
+        if (latest != null) {
+            ytDlpVersion = latest;
+        }
+        return ytDlpVersion;
+    }
+
+    private String probeYtDlpVersion() {
+        if (ytDlpPath == null || !Files.isRegularFile(ytDlpPath)) {
+            return null;
+        }
+        try {
+            Process process = new ProcessBuilder(ytDlpPath.toString(), "--version")
+                    .redirectErrorStream(true)
+                    .start();
+            String lastNonEmpty = null;
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    String trimmed = line.trim();
+                    if (!trimmed.isEmpty()) {
+                        lastNonEmpty = trimmed;
+                    }
+                }
+            }
+            if (!process.waitFor(10, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return null;
+            }
+            if (lastNonEmpty != null) {
+                return lastNonEmpty;
+            }
+            return process.exitValue() == 0 ? ytDlpVersion : null;
+        } catch (Exception ignored) {
+            return null;
         }
     }
 
