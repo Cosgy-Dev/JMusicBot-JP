@@ -56,7 +56,13 @@ public class PlaylistLoader {
         if (folderExists()) {
             if (folderGuildExists(guildId)) {
                 File folder = new File(OtherUtil.getPath(config.getPlaylistsFolder() + File.separator + guildId).toString());
-                return Arrays.stream(Objects.requireNonNull(folder.listFiles((pathname) -> pathname.getName().endsWith(".txt")))).map(f -> f.getName().substring(0, f.getName().length() - 4)).collect(Collectors.toList());
+                File[] files = folder.listFiles((pathname) -> pathname.getName().endsWith(".txt"));
+                if (files == null) {
+                    return Collections.emptyList();
+                }
+                return Arrays.stream(files)
+                        .map(f -> f.getName().substring(0, f.getName().length() - 4))
+                        .collect(Collectors.toList());
             } else {
                 createGuildFolder(guildId);
                 return getPlaylistNames(guildId);

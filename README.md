@@ -33,6 +33,7 @@ JMusicBotは、シンプルでかつ操作性の良いUIを使用しています
 
 このボットはJava25以上のバージョンが必要です。
 Javaがインストールされていない場合は、[こちら](https://www.oracle.com/jp/java/technologies/downloads/) からダウンロードしてください。
+また、音声抽出・変換のために `ffmpeg` / `ffprobe` を実行環境にインストールしてください（jarへの同梱は行いません）。
 このボットを自分で起動するには [Cosgy Dev 公式ページ](https://www.cosgy.dev/2019/09/06/jmusicbot-setup/) を参照してください
 また、DAVEを使用するため、起動時には `--enable-native-access=ALL-UNNAMED` の付与を推奨します。
 
@@ -40,6 +41,25 @@ Javaがインストールされていない場合は、[こちら](https://www.o
 
 Dockerを使用してJavaのインストールなどを行わずにこのボットを自分で起動することができます。
 Dockerを使用する場合は、[こちら](https://hub.docker.com/r/cyberrex/jmusicbot-jp) を参照してください。
+
+# Jenkins CI (ci.cosgy.dev)
+
+このリポジトリには `Jenkinsfile` が含まれています。  
+Jenkins の Pipeline ジョブでこのリポジトリを指定すると、以下を実行します。
+
+* `mvn --batch-mode --update-snapshots clean verify`
+* `target/*.jar` のアーカイブ公開
+* `PUBLISH_DIR` 環境変数が設定されている場合は、指定ディレクトリへ成果物をコピー
+
+成果物は Jenkins のビルド画面からダウンロードできます。
+
+# GitHub Actions のテストCI
+
+`.github/workflows/maven.yml` で、`develop`/`master` への push・pull request 時に単体テストを実行します。
+
+ローカルで同等のテストを実行する場合は以下を使用してください。
+
+* `./mvn --batch-mode --update-snapshots test`
 
 # 注意
 

@@ -205,21 +205,32 @@ public final class YtDlpManager {
 
     /** 現在のプラットフォームに適したアセット名を選択 */
     private static String pickAssetForCurrentPlatform() {
-        String os = System.getProperty("os.name").toLowerCase(Locale.ROOT);
-        String arch = System.getProperty("os.arch").toLowerCase(Locale.ROOT);
+        return pickAssetForPlatform(
+                System.getProperty("os.name"),
+                System.getProperty("os.arch")
+        );
+    }
+
+    static String pickAssetForPlatform(String osName, String archName) {
+        String os = osName.toLowerCase(Locale.ROOT);
+        String arch = archName.toLowerCase(Locale.ROOT);
 
         log.debug("プラットフォームを検出: OS={}, Arch={}", os, arch);
-        if (os.contains("win")) {
+        if (os.contains("mac") || os.contains("darwin")) {
+            log.debug("macOS版を選択");
+            return "yt-dlp_macos";
+        } else if (os.contains("win")) {
             if (arch.contains("aarch64") || arch.contains("arm64")) {
                 log.debug("Windows ARM64版を選択");
                 return "yt-dlp_arm64.exe";
             }
             log.debug("Windows版を選択");
             return "yt-dlp.exe";
-        } else if (os.contains("mac") || os.contains("darwin")) {
-            log.debug("macOS版を選択");
-            return "yt-dlp_macos";
         } else {
+            if (arch.contains("aarch64") || arch.contains("arm64")) {
+                log.debug("Linux ARM64版を選択");
+                return "yt-dlp_linux_aarch64";
+            }
             log.debug("Linux版を選択");
             return "yt-dlp_linux";
         }

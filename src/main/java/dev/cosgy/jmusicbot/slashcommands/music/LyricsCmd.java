@@ -15,9 +15,9 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
+import dev.cosgy.jlyrics.LyricsClient;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
-import com.jagrosh.jlyrics.LyricsClient;
 import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import dev.cosgy.jmusicbot.slashcommands.MusicCommand;

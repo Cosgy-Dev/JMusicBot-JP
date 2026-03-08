@@ -43,6 +43,30 @@ public class FairQueueTest {
         assertEquals(queue.size(), size);
     }
 
+    @Test
+    public void addWithForceToEndPlacesItemAtTail() {
+        FairQueue<Q> queue = new FairQueue<>();
+        queue.add(new Q(1));
+        queue.add(new Q(2));
+        int inserted = queue.add(new Q(1), true);
+
+        assertEquals(2, inserted);
+        assertEquals(1, queue.get(2).getIdentifier());
+    }
+
+    @Test
+    public void addWithoutForceToEndKeepsFairOrder() {
+        FairQueue<Q> queue = new FairQueue<>();
+        queue.add(new Q(1));
+        queue.add(new Q(2));
+        queue.add(new Q(3));
+        queue.add(new Q(2));
+        int inserted = queue.add(new Q(1), false);
+
+        assertEquals(3, inserted);
+        assertEquals(1, queue.get(inserted).getIdentifier());
+    }
+
     private class Q implements Queueable {
         private final long identifier;
 

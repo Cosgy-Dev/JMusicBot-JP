@@ -1,23 +1,27 @@
-image: ubuntu
+image: Ubuntu2204
+
+environment:
+  MAVEN_OPTS: -Xmx3200m
 
 install:
-  - sh: sudo add-apt-repository --yes ppa:rpardini/adoptopenjdk
   - sh: sudo apt-get update
-  - sh: sudo apt-get install -y adoptopenjdk-11-jdk-hotspot-installer
-  - sh: sudo apt install adoptopenjdk-11-jdk-hotspot-set-default
-  #/usr/lib/jvm/adoptopenjdk-11-jdk-hotspot
-  - sh: export JAVA_HOME=/usr/lib/jvm/adoptopenjdk-11-jdk-hotspot
-  - sh: echo $JAVA_HOME
-  - sh: export PATH=${PATH}
-
-before_build:
-  - mvn -v
+  - sh: sudo apt-get install -y maven wget tar
+  - sh: |
+      set -e
+      JDK_URL="https://github.com/adoptium/temurin25-binaries/releases/download/jdk-25.0.2%2B10/OpenJDK25U-jdk_x64_linux_hotspot_25.0.2_10.tar.gz"
+      wget -q "$JDK_URL" -O /tmp/temurin25.tar.gz
+      sudo mkdir -p /opt/temurin25
+      sudo tar -xzf /tmp/temurin25.tar.gz -C /opt/temurin25 --strip-components=1
+      export JAVA_HOME=/opt/temurin25
+      export PATH="$JAVA_HOME/bin:$PATH"
+      java -version
+      mvn -v
 
 build_script:
-  - mvn clean package -DskipTests
+  - sh: export JAVA_HOME=/opt/temurin25 && export PATH="$JAVA_HOME/bin:$PATH" && mvn --batch-mode --update-snapshots -DskipTests package
 
 test_script:
-  - mvn install verify
+  - sh: export JAVA_HOME=/opt/temurin25 && export PATH="$JAVA_HOME/bin:$PATH" && mvn --batch-mode --update-snapshots verify
 
 on_finish:
   - sh: |
@@ -26,4 +30,4 @@ on_finish:
 artifacts:
   - path: "**/target/*.?ar"
 
-version: "0.8.0.{build}"
+version: "{build}"

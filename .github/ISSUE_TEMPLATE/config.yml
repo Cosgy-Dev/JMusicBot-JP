@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 質問・相談（GitHub Discussions）
+    url: https://github.com/Cosgy-Dev/JMusicBot-JP/discussions
+    about: 使い方の質問や相談はDiscussionsをご利用ください
+  - name: セットアップ手順
+    url: https://www.cosgy.dev/2019/09/06/jmusicbot-setup/
+    about: インストールや起動方法はこちらを確認してください
