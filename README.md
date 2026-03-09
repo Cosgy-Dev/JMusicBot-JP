@@ -7,6 +7,7 @@
 [![Discord](https://discordapp.com/api/guilds/497317844191805450/widget.png)](https://discord.gg/RBpkHxf)
 ![CircleCI](https://img.shields.io/circleci/build/github/Cosgy-Dev/JMusicBot-JP/develop?token=c2ceb77e45cfce45bc8e15161f91d355c54f48b1)
 [![CodeFactor](https://www.codefactor.io/repository/github/cosgy-dev/jmusicbot-jp/badge)](https://www.codefactor.io/repository/github/cosgy-dev/jmusicbot-jp)
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/kosugi_kun)
 
 # JMusicBotJP
 
