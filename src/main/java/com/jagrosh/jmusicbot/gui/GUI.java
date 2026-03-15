@@ -15,26 +15,39 @@
  */
 package com.jagrosh.jmusicbot.gui;
 
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatLaf;
 import com.formdev.flatlaf.FlatLightLaf;
 import com.jagrosh.jmusicbot.Bot;
 import net.dv8tion.jda.api.JDA;
 
 import javax.swing.*;
 import javax.swing.border.Border;
+import javax.swing.event.PopupMenuEvent;
+import javax.swing.event.PopupMenuListener;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
+import java.util.concurrent.TimeUnit;
+import java.util.prefs.Preferences;
 
 /**
  * @author John Grosh <john.a.grosh@gmail.com>
  */
 public class GUI extends JFrame {
-    private final ConsolePanel console;
-    private final PlaylistManagerPanel playlistManager;
+    private static final String THEME_MODE_PREF_KEY = "gui.theme.mode";
+
+    private ConsolePanel console;
+    private PlaylistManagerPanel playlistManager;
     private final Bot bot;
     private final Instant startedAt;
+    private final Preferences preferences;
 
     private final JLabel botStatusValue;
     private final JLabel uptimeValue;
@@ -45,14 +58,20 @@ public class GUI extends JFrame {
     private final JLabel ffmpegValue;
     private final JLabel ytDlpVersionValue;
     private final JLabel statusBadge;
+    private JComboBox<ThemeMode> themeModeCombo;
+    private final ThemeMode userThemeMode;
+    private ThemeMode pendingThemeMode;
+    private boolean suppressThemeComboEvents;
     private Instant lastExternalToolsRefreshedAt;
+    private Instant lastSystemThemeCheckedAt;
+    private boolean appliedDarkTheme;
     private boolean listTargetsLoadedAfterConnect;
 
     public GUI(Bot bot) {
         super();
         this.bot = bot;
-        this.console = new ConsolePanel();
-        this.playlistManager = new PlaylistManagerPanel(bot);
+        this.preferences = Preferences.userNodeForPackage(GUI.class);
+        this.userThemeMode = loadThemeModePreference();
         this.startedAt = Instant.now();
 
         this.botStatusValue = new JLabel("初期化中");
@@ -64,12 +83,36 @@ public class GUI extends JFrame {
         this.ffmpegValue = new JLabel("確認中");
         this.ytDlpVersionValue = new JLabel("確認中");
         this.statusBadge = new JLabel("初期化中");
+        this.pendingThemeMode = userThemeMode;
+        this.suppressThemeComboEvents = false;
         this.lastExternalToolsRefreshedAt = Instant.EPOCH;
+        this.lastSystemThemeCheckedAt = Instant.EPOCH;
+        this.appliedDarkTheme = false;
         this.listTargetsLoadedAfterConnect = false;
     }
 
     public void init() {
-        installLookAndFeel();
+        if (!SwingUtilities.isEventDispatchThread()) {
+            try {
+                SwingUtilities.invokeAndWait(this::initOnEdt);
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new RuntimeException("GUI初期化が中断されました", ex);
+            } catch (InvocationTargetException ex) {
+                throw new RuntimeException("GUI初期化に失敗しました", ex.getCause());
+            }
+            return;
+        }
+        initOnEdt();
+    }
+
+    private void initOnEdt() {
+        appliedDarkTheme = resolveThemeDark(userThemeMode);
+        installLookAndFeel(appliedDarkTheme);
+
+        this.console = new ConsolePanel();
+        this.playlistManager = new PlaylistManagerPanel(bot);
+        this.themeModeCombo = createThemeModeCombo();
 
         setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE);
         setTitle("JMusicBot JP");
@@ -77,11 +120,13 @@ public class GUI extends JFrame {
 
         JPanel root = new JPanel(new BorderLayout(12, 12));
         root.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-        root.setBackground(new Color(246, 248, 251));
         root.add(createHeader(), BorderLayout.NORTH);
         root.add(createMainTabs(), BorderLayout.CENTER);
 
         setContentPane(root);
+        SwingUtilities.updateComponentTreeUI(this);
+        console.applyTheme();
+        playlistManager.applyTheme();
 
         Timer refreshTimer = new Timer(1000, e -> refreshStatus());
         refreshTimer.start();
@@ -109,9 +154,9 @@ public class GUI extends JFrame {
         });
     }
 
-    private void installLookAndFeel() {
+    private void installLookAndFeel(boolean dark) {
         try {
-            FlatLightLaf.setup();
+            FlatLaf.setup(dark ? new FlatDarkLaf() : new FlatLightLaf());
             UIManager.put("Component.arc", 14);
             UIManager.put("Button.arc", 14);
             UIManager.put("TextComponent.arc", 10);
@@ -135,7 +180,6 @@ public class GUI extends JFrame {
     private JPanel createHeader() {
         JPanel header = new JPanel(new BorderLayout(12, 0));
         header.setBorder(createSectionBorder(12));
-        header.setBackground(Color.WHITE);
 
         JPanel textPanel = new JPanel();
         textPanel.setOpaque(false);
@@ -161,6 +205,8 @@ public class GUI extends JFrame {
         clearButton.addActionListener(e -> console.clearConsole());
         copyButton.addActionListener(e -> console.copyAllLogs());
 
+        right.add(new JLabel("テーマ"));
+        right.add(themeModeCombo);
         right.add(statusBadge);
         right.add(clearButton);
         right.add(copyButton);
@@ -188,7 +234,7 @@ public class GUI extends JFrame {
 
         JPanel tips = new JPanel();
         tips.setOpaque(true);
-        tips.setBackground(Color.WHITE);
+        tips.setBackground(getCardBackgroundColor());
         tips.setLayout(new BoxLayout(tips, BoxLayout.Y_AXIS));
         tips.setBorder(createSectionBorder(10));
         tips.add(new JLabel("・コンソールタブで Ctrl+F によりログ検索できます"));
@@ -205,14 +251,13 @@ public class GUI extends JFrame {
     private JPanel createStatCard(String title, JLabel valueLabel) {
         JPanel card = new JPanel(new BorderLayout(4, 8));
         card.setOpaque(true);
-        card.setBackground(Color.WHITE);
+        card.setBackground(getCardBackgroundColor());
         card.setBorder(createSectionBorder(10));
 
         JLabel titleLabel = new JLabel(title);
         titleLabel.setFont(titleLabel.getFont().deriveFont(Font.PLAIN, 12f));
-        titleLabel.setForeground(new Color(105, 111, 118));
+        titleLabel.setForeground(getMutedLabelColor());
         valueLabel.setFont(valueLabel.getFont().deriveFont(Font.BOLD, 22f));
-        valueLabel.setForeground(new Color(25, 34, 48));
 
         card.add(titleLabel, BorderLayout.NORTH);
         card.add(valueLabel, BorderLayout.CENTER);
@@ -258,6 +303,7 @@ public class GUI extends JFrame {
 
         logLineValue.setText(String.valueOf(console.getLogLineCount()));
         refreshExternalToolStatusIfNeeded();
+        syncSystemThemeIfNeeded();
     }
 
     private void refreshExternalToolStatusIfNeeded() {
@@ -280,6 +326,136 @@ public class GUI extends JFrame {
         statusBadge.setForeground(foreground);
     }
 
+    private void applyThemeMode(ThemeMode mode, boolean persist) {
+        if (isAnyComboPopupVisible(this)) {
+            pendingThemeMode = mode;
+            return;
+        }
+        appliedDarkTheme = resolveThemeDark(mode);
+        installLookAndFeel(appliedDarkTheme);
+        SwingUtilities.updateComponentTreeUI(this);
+        console.applyTheme();
+        playlistManager.applyTheme();
+        suppressThemeComboEvents = true;
+        try {
+            themeModeCombo.setSelectedItem(mode);
+        } finally {
+            suppressThemeComboEvents = false;
+        }
+        pendingThemeMode = mode;
+        if (persist) {
+            preferences.put(THEME_MODE_PREF_KEY, mode.name());
+        }
+    }
+
+    private void applyPendingThemeMode(boolean persist) {
+        if (pendingThemeMode == null) {
+            return;
+        }
+        applyThemeMode(pendingThemeMode, persist);
+    }
+
+    private ThemeMode loadThemeModePreference() {
+        String raw = preferences.get(THEME_MODE_PREF_KEY, ThemeMode.SYSTEM.name());
+        try {
+            return ThemeMode.valueOf(raw.toUpperCase(Locale.ROOT));
+        } catch (Exception ignored) {
+            return ThemeMode.SYSTEM;
+        }
+    }
+
+    private boolean resolveThemeDark(ThemeMode mode) {
+        return switch (mode) {
+            case LIGHT -> false;
+            case DARK -> true;
+            case SYSTEM -> isSystemDarkMode();
+        };
+    }
+
+    private boolean isSystemDarkMode() {
+        String osName = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
+        if (osName.contains("win")) {
+            return isWindowsDarkMode();
+        }
+        if (osName.contains("mac")) {
+            return isMacDarkMode();
+        }
+        return isLinuxDarkMode();
+    }
+
+    private void syncSystemThemeIfNeeded() {
+        if (themeModeCombo == null) {
+            return;
+        }
+        if (themeModeCombo.getSelectedItem() != ThemeMode.SYSTEM) {
+            return;
+        }
+        Instant now = Instant.now();
+        if (Duration.between(lastSystemThemeCheckedAt, now).compareTo(Duration.ofSeconds(30)) < 0) {
+            return;
+        }
+        lastSystemThemeCheckedAt = now;
+        boolean currentSystemDark = isSystemDarkMode();
+        if (currentSystemDark != appliedDarkTheme) {
+            applyThemeMode(ThemeMode.SYSTEM, false);
+        }
+    }
+
+    private boolean isWindowsDarkMode() {
+        String out = runAndRead("reg", "query", "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize", "/v", "AppsUseLightTheme");
+        if (out == null || out.isBlank()) {
+            return false;
+        }
+        String lower = out.toLowerCase(Locale.ROOT);
+        return lower.contains("0x0") || lower.matches("(?s).*\\bappsuselighttheme\\b.*\\b0\\b.*");
+    }
+
+    private boolean isMacDarkMode() {
+        String out = runAndRead("defaults", "read", "-g", "AppleInterfaceStyle");
+        return out != null && out.toLowerCase(Locale.ROOT).contains("dark");
+    }
+
+    private boolean isLinuxDarkMode() {
+        String gtkTheme = System.getenv("GTK_THEME");
+        if (gtkTheme != null && gtkTheme.toLowerCase(Locale.ROOT).contains("dark")) {
+            return true;
+        }
+        String colorScheme = runAndRead("gsettings", "get", "org.gnome.desktop.interface", "color-scheme");
+        if (colorScheme != null && colorScheme.toLowerCase(Locale.ROOT).contains("prefer-dark")) {
+            return true;
+        }
+        String theme = runAndRead("gsettings", "get", "org.gnome.desktop.interface", "gtk-theme");
+        return theme != null && theme.toLowerCase(Locale.ROOT).contains("dark");
+    }
+
+    private String runAndRead(String... command) {
+        try {
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+            boolean done = process.waitFor(1200, TimeUnit.MILLISECONDS);
+            if (!done) {
+                process.destroyForcibly();
+                return null;
+            }
+            byte[] bytes = process.getInputStream().readAllBytes();
+            return new String(bytes, StandardCharsets.UTF_8).trim();
+        } catch (InterruptedException ignored) {
+            Thread.currentThread().interrupt();
+            return null;
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    private Color getMutedLabelColor() {
+        Color c = UIManager.getColor("Label.disabledForeground");
+        return c != null ? c : new Color(105, 111, 118);
+    }
+
+    private Color getCardBackgroundColor() {
+        Color c = UIManager.getColor("TextField.background");
+        return c != null ? c : Color.WHITE;
+    }
+
     private void styleHeaderButton(JButton button) {
         button.setFont(button.getFont().deriveFont(Font.PLAIN, 14f));
         button.setMargin(new Insets(8, 14, 8, 14));
@@ -287,8 +463,74 @@ public class GUI extends JFrame {
 
     private Border createSectionBorder(int padding) {
         return BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(220, 224, 230)),
+                new ThemeAwareLineBorder(),
                 BorderFactory.createEmptyBorder(padding, padding, padding, padding)
         );
+    }
+
+    private JComboBox<ThemeMode> createThemeModeCombo() {
+        JComboBox<ThemeMode> combo = new JComboBox<>(ThemeMode.values());
+        combo.setSelectedItem(userThemeMode);
+        combo.setToolTipText("テーマ表示モード");
+        combo.addActionListener(e -> {
+            if (suppressThemeComboEvents) {
+                return;
+            }
+            ThemeMode selected = (ThemeMode) combo.getSelectedItem();
+            if (selected != null) {
+                pendingThemeMode = selected;
+                if (!combo.isPopupVisible()) {
+                    applyPendingThemeMode(true);
+                }
+            }
+        });
+        combo.addPopupMenuListener(new PopupMenuListener() {
+            @Override
+            public void popupMenuWillBecomeVisible(PopupMenuEvent e) {
+                // no-op
+            }
+
+            @Override
+            public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {
+                SwingUtilities.invokeLater(() -> applyPendingThemeMode(true));
+            }
+
+            @Override
+            public void popupMenuCanceled(PopupMenuEvent e) {
+                // no-op
+            }
+        });
+        return combo;
+    }
+
+    private boolean isAnyComboPopupVisible(Component component) {
+        if (component instanceof JComboBox<?> combo && combo.isPopupVisible()) {
+            return true;
+        }
+        if (component instanceof Container container) {
+            for (Component child : container.getComponents()) {
+                if (isAnyComboPopupVisible(child)) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private enum ThemeMode {
+        SYSTEM("システム"),
+        LIGHT("ライト"),
+        DARK("ダーク");
+
+        private final String label;
+
+        ThemeMode(String label) {
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
     }
 }
