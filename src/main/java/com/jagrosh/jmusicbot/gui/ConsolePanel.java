@@ -43,7 +43,7 @@ public class ConsolePanel extends JPanel {
     private final JLabel charCountLabel;
     private final JProgressBar renderProgressBar;
     private final JLabel backlogCountLabel;
-    private final Highlighter.HighlightPainter highlightPainter;
+    private Highlighter.HighlightPainter highlightPainter;
     private final List<int[]> matches = new ArrayList<>();
     private int selectedMatch = -1;
 
@@ -75,7 +75,7 @@ public class ConsolePanel extends JPanel {
         renderProgressBar.setVisible(false);
         renderProgressBar.setStringPainted(true);
         renderProgressBar.setString("非同期描画中...");
-        highlightPainter = new DefaultHighlighter.DefaultHighlightPainter(new Color(255, 232, 168));
+        highlightPainter = new DefaultHighlighter.DefaultHighlightPainter(getHighlightColor());
 
         JScrollPane scrollPane = new JScrollPane(textArea);
         scrollPane.setBorder(BorderFactory.createEmptyBorder());
@@ -112,6 +112,14 @@ public class ConsolePanel extends JPanel {
 
     public int getLogLineCount() {
         return Math.max(textArea.getLineCount(), 0);
+    }
+
+    public void applyTheme() {
+        highlightPainter = new DefaultHighlighter.DefaultHighlightPainter(getHighlightColor());
+        if (!searchField.getText().isBlank()) {
+            refreshSearchHighlights();
+        }
+        updatePauseButtonState();
     }
 
     private JPanel createActionBar() {
@@ -418,5 +426,13 @@ public class ConsolePanel extends JPanel {
             return;
         }
         matchCountLabel.setText("一致: " + matches.size() + "件");
+    }
+
+    private Color getHighlightColor() {
+        Color c = UIManager.getColor("TextArea.selectionBackground");
+        if (c != null) {
+            return c;
+        }
+        return new Color(255, 232, 168);
     }
 }

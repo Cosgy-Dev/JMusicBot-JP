@@ -56,6 +56,12 @@ public class PlaylistManagerPanel extends JPanel {
         }
     }
 
+    public void applyTheme() {
+        for (ScopeEditorPanel panel : scopedPanels) {
+            panel.applyTheme();
+        }
+    }
+
     private enum ScopeType {
         PLAYLIST,
         MYLIST,
@@ -177,7 +183,6 @@ public class PlaylistManagerPanel extends JPanel {
                 case PUBLIC -> controls.add(new JLabel("公開リストは全体共有です"));
             }
             selectedTargetLabel.setFont(selectedTargetLabel.getFont().deriveFont(Font.PLAIN, 13f));
-            selectedTargetLabel.setForeground(new Color(80, 80, 80));
             selectedTargetLabel.setBorder(new EmptyBorder(0, 4, 0, 0));
             header.add(controls, BorderLayout.NORTH);
             if (scopeType != ScopeType.PUBLIC) {
@@ -769,9 +774,13 @@ public class PlaylistManagerPanel extends JPanel {
 
         private Border createSectionBorder() {
             return BorderFactory.createCompoundBorder(
-                    BorderFactory.createLineBorder(new Color(220, 224, 230)),
+                    new ThemeAwareLineBorder(),
                     BorderFactory.createEmptyBorder(8, 8, 8, 8)
             );
+        }
+
+        private void applyTheme() {
+            selectedTargetLabel.setForeground(UIManager.getColor("Label.disabledForeground"));
         }
     }
 
