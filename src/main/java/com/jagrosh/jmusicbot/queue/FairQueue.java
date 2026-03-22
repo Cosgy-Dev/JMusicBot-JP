@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * @param <T>
@@ -26,7 +27,6 @@ import java.util.Set;
  */
 public class FairQueue<T extends Queueable> {
     private final List<T> list = new ArrayList<>();
-    private final Set<Long> set = new HashSet<>();
 
     /**
      * @deprecated 新しくフェアキューと普通のキューを切り替えられるメゾットを追加したのでそちらを使用してください。
@@ -34,19 +34,7 @@ public class FairQueue<T extends Queueable> {
      * @return 何曲目に追加したか
      */
     public int add(T item) {
-        int lastIndex;
-        for (lastIndex = list.size() - 1; lastIndex > -1; lastIndex--)
-            if (list.get(lastIndex).getIdentifier() == item.getIdentifier())
-                break;
-        lastIndex++;
-        set.clear();
-        for (; lastIndex < list.size(); lastIndex++) {
-            if (set.contains(list.get(lastIndex).getIdentifier()))
-                break;
-            set.add(list.get(lastIndex).getIdentifier());
-        }
-        list.add(lastIndex, item);
-        return lastIndex;
+        return add(item, false);
     }
 
     /**
@@ -66,11 +54,11 @@ public class FairQueue<T extends Queueable> {
             if (list.get(lastIndex).getIdentifier() == item.getIdentifier())
                 break;
         lastIndex++;
-        set.clear();
+        Set<Long> seen = new HashSet<>();
         for (; lastIndex < list.size(); lastIndex++) {
-            if (set.contains(list.get(lastIndex).getIdentifier()))
+            if (seen.contains(list.get(lastIndex).getIdentifier()))
                 break;
-            set.add(list.get(lastIndex).getIdentifier());
+            seen.add(list.get(lastIndex).getIdentifier());
         }
         list.add(lastIndex, item);
         return lastIndex;
@@ -128,9 +116,10 @@ public class FairQueue<T extends Queueable> {
             if (list.get(i).getIdentifier() == identifier)
                 iset.add(i);
         }
+        ThreadLocalRandom rng = ThreadLocalRandom.current();
         for (int j = 0; j < iset.size(); j++) {
             int first = iset.get(j);
-            int second = iset.get((int) (Math.random() * iset.size()));
+            int second = iset.get(rng.nextInt(iset.size()));
             T temp = list.get(first);
             list.set(first, list.get(second));
             list.set(second, temp);

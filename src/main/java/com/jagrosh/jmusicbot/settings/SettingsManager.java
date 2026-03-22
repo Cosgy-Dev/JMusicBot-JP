@@ -26,17 +26,17 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.NoSuchFileException;
-import java.util.HashMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * @author John Grosh (john.a.grosh@gmail.com)
  */
 public class SettingsManager implements GuildSettingsManager {
     private final static double SKIP_RATIO = .55;
-    private final HashMap<Long, Settings> settings;
+    private final ConcurrentHashMap<Long, Settings> settings;
 
     public SettingsManager() {
-        this.settings = new HashMap<>();
+        this.settings = new ConcurrentHashMap<>();
         try {
             JSONObject loadedSettings = new JSONObject(new String(Files.readAllBytes(OtherUtil.getPath("serversettings.json"))));
             loadedSettings.keySet().forEach((id) -> {

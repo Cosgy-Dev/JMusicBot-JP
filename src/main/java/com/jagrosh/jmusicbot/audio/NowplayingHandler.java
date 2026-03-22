@@ -31,10 +31,9 @@ import net.dv8tion.jda.api.exceptions.PermissionException;
 import net.dv8tion.jda.api.exceptions.RateLimitedException;
 import net.dv8tion.jda.api.utils.messages.MessageEditData;
 
-import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -42,11 +41,11 @@ import java.util.concurrent.TimeUnit;
  */
 public class NowplayingHandler {
     private final Bot bot;
-    private final HashMap<Long, Pair<Long, Long>> lastNP; // guild -> channel,message
+    private final ConcurrentHashMap<Long, Pair<Long, Long>> lastNP; // guild -> channel,message
 
     public NowplayingHandler(Bot bot) {
         this.bot = bot;
-        this.lastNP = new HashMap<>();
+        this.lastNP = new ConcurrentHashMap<>();
     }
 
     public void init() {
@@ -77,11 +76,16 @@ public class NowplayingHandler {
                 continue;
             }
             AudioHandler handler = (AudioHandler) guild.getAudioManager().getSendingHandler();
+            if (handler == null) {
+                toRemove.add(guildId);
+                continue;
+            }
             MessageEditData msg = null;
             try {
-                msg = MessageEditData.fromCreateData(Objects.requireNonNull(handler).getNowPlaying(bot.getJDA()));
+                msg = MessageEditData.fromCreateData(handler.getNowPlaying(bot.getJDA()));
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                toRemove.add(guildId);
+                continue;
             }
             if (msg == null) {
                 msg = MessageEditData.fromCreateData(handler.getNoMusicPlaying(bot.getJDA()));
@@ -196,7 +200,7 @@ public class NowplayingHandler {
     public void onTrackUpdate(long guildId, AudioTrack track, AudioHandler handler) {
         // 該当する場合はボットステータスを更新します
         if (bot.getConfig().getSongInStatus()) {
-            if (track != null && bot.getJDA().getGuilds().stream().filter(g -> Objects.requireNonNull(g.getSelfMember().getVoiceState()).inAudioChannel()).count() <= 1)
+            if (track != null && bot.getJDA().getGuilds().stream().filter(g -> { GuildVoiceState vs = g.getSelfMember().getVoiceState(); return vs != null && vs.inAudioChannel(); }).limit(2).count() <= 1)
 
                 if (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*")) {
                     bot.getJDA().getPresence().setActivity(Activity.listening("幻想郷ラジオ"));
