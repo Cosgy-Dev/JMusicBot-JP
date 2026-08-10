@@ -21,6 +21,7 @@ import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
+import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.track.*;
@@ -42,8 +43,14 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.regex.Pattern;
 
 public class PlayerManager extends DefaultAudioPlayerManager {
+    /** yt-dlp フォールバックの対象となる提供元名 */
+    private static final String YOUTUBE_SOURCE_NAME = "youtube";
+    /** ニコニコ動画の動画ID（sm/nm/so + 数字） */
+    private static final Pattern NICO_ID_PATTERN = Pattern.compile("^(?:sm|nm|so)[0-9]+$");
+
     private final Bot bot;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
 
@@ -78,11 +85,17 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
         // ==== ソース登録 ====
         if (bot.getConfig().isNicoNicoEnabled()) {
-            registerSourceManager(
-                    new com.sedmelluq.discord.lavaplayer.source.nico.NicoAudioSourceManager(
-                            bot.getConfig().getNicoNicoEmailAddress(),
-                            bot.getConfig().getNicoNicoPassword())
-            );
+            // ニコニコ側の仕様変更などで初期化に失敗しても Bot 全体を停止させない
+            try {
+                registerSourceManager(
+                        new com.sedmelluq.discord.lavaplayer.source.nico.NicoAudioSourceManager(
+                                bot.getConfig().getNicoNicoEmailAddress(),
+                                bot.getConfig().getNicoNicoPassword())
+                );
+            } catch (Exception e) {
+                logger.error("ニコニコ動画のソースマネージャーの初期化に失敗しました。"
+                        + "ニコニコ動画の再生は無効化されますが、Botは起動を続行します。", e);
+            }
         }
 
         YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true);
@@ -239,6 +252,22 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         });
     }
 
+    /**
+     * yt-dlp による YouTube フォールバックの対象トラックかどうかを判定する。
+     * <p>
+     * 識別子だけでは、ニコニコ動画の ID（例: so29416460）が YouTube の動画 ID と区別できず、
+     * 誤って {@code https://www.youtube.com/watch?v=so29416460} を取得しにいってしまう。
+     * トラックが分かっている場合は、必ず提供元も併せて確認する。
+     */
+    boolean shouldFallbackToYtDlp(AudioTrack track) {
+        if (track == null) return false;
+        AudioSourceManager sourceManager = track.getSourceManager();
+        if (sourceManager != null && !YOUTUBE_SOURCE_NAME.equals(sourceManager.getSourceName())) {
+            return false;
+        }
+        return shouldFallbackToYtDlp(track.getIdentifier());
+    }
+
     boolean shouldFallbackToYtDlp(String identifier) {
         if (ytDlpPath == null || identifier == null) return false;
         String id = identifier.toLowerCase(Locale.ROOT);
@@ -246,6 +275,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         if (id.startsWith("http://") || id.startsWith("https://")) {
             return id.contains("youtube.com/") || id.contains("youtu.be/");
         }
+        if (NICO_ID_PATTERN.matcher(id).matches()) return false; // ニコニコ動画のID
         return id.matches("^[a-zA-Z0-9_-]{10,}$"); // 素のID
     }
 
@@ -464,7 +494,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             String id = track != null ? track.getIdentifier() : null;
             pm.logger.warn("再生中に例外発生。id={} msg={}", id, exception.getMessage());
 
-            if (track == null || !pm.shouldFallbackToYtDlp(id)) return;
+            if (!pm.shouldFallbackToYtDlp(track)) return;
 
             // 次に来る onTrackEnd を一度だけ抑制（退出防止）
             handler.suppressAutoLeaveOnce();
@@ -516,11 +546,15 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         public void onTrackStuck(AudioPlayer player, AudioTrack track, long thresholdMs) {
             if (track == null) return;
             String id = track.getIdentifier();
-            if (pm.shouldFallbackToYtDlp(id)) {
-                pm.logger.warn("トラックがスタック。yt-dlpへフォールバックを試行: id={}, stuck={}ms", id, thresholdMs);
-                onTrackException(player, track, new FriendlyException("stuck " + thresholdMs + "ms",
-                        FriendlyException.Severity.SUSPICIOUS, null));
+            if (!pm.shouldFallbackToYtDlp(track)) {
+                // ニコニコ動画などは再生前に yt-dlp でのダウンロードが入るため、
+                // スタック扱いになっても待つ以外にできることはない
+                pm.logger.debug("トラックがスタックしましたが、フォールバック対象外です: id={}, stuck={}ms", id, thresholdMs);
+                return;
             }
+            pm.logger.warn("トラックがスタック。yt-dlpへフォールバックを試行: id={}, stuck={}ms", id, thresholdMs);
+            onTrackException(player, track, new FriendlyException("stuck " + thresholdMs + "ms",
+                    FriendlyException.Severity.SUSPICIOUS, null));
         }
     }
 }

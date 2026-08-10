@@ -46,7 +46,6 @@ import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.COMMON;
 import static com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.SUSPICIOUS;
 
 /**
@@ -91,13 +90,16 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
         loggedIn = new AtomicBoolean();
         // Log in at the start
         if (!DataFormatTools.isNullOrEmpty(email) && !DataFormatTools.isNullOrEmpty(password)) {
-            logIn(email, password);
             NicoAudioSourceManager.userName = email;
             NicoAudioSourceManager.password = password;
+            // ログインに失敗しても Bot 全体を停止させない。
+            // 実際の再生は yt-dlp 側が同じ資格情報でログインするため、ここでの失敗は致命的ではない。
+            logIn(email, password);
         }
 
-        if(!BotConfig.getNicoNicoTwoFactor().isEmpty()){
-            NicoAudioSourceManager.twofactor = BotConfig.getNicoNicoTwoFactor();
+        String twoFactor = BotConfig.getNicoNicoTwoFactor();
+        if (!DataFormatTools.isNullOrEmpty(twoFactor)) {
+            NicoAudioSourceManager.twofactor = twoFactor;
         }
     }
 
@@ -231,13 +233,23 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
         httpInterfaceManager.configureBuilder(configurator);
     }
 
-    void logIn(String email, String password) {
+    /**
+     * ニコニコにログインを試みる。
+     * <p>
+     * ニコニコ側のログインフローは頻繁に変更されるため、ここでの失敗は致命的なエラーとして扱わず、
+     * 警告を出して続行する（例外を投げると Bot の起動そのものが失敗し、systemd の再起動ループに陥る）。
+     * 実際の再生は {@link NicoAudioTrack} が yt-dlp に資格情報を渡して行うため、
+     * このセッションが確立できなくても再生自体は継続できる。
+     *
+     * @return ログインに成功した場合 true
+     */
+    boolean logIn(String email, String password) {
         synchronized (loggedIn) {
             if (loggedIn.get()) {
-                return;
+                return true;
             }
 
-            String url = "https://account.nicovideo.jp/login/redirector".trim();
+            String url = "https://account.nicovideo.jp/login/redirector?site=niconico";
             URI uri = URI.create(url);
             HttpPost loginRequest = new HttpPost(uri);
 
@@ -251,19 +263,27 @@ public class NicoAudioSourceManager implements AudioSourceManager, HttpConfigura
                     int statusCode = response.getStatusLine().getStatusCode();
 
                     if (statusCode != 302) {
-                        throw new IOException("Unexpected response code " + statusCode);
+                        log.warn("ニコニコへのログインに失敗しました（応答コード: {}）。"
+                                + "再生は yt-dlp 側のログインで継続します。", statusCode);
+                        return false;
                     }
 
                     Header location = response.getFirstHeader("Location");
 
                     if (location == null || location.getValue().contains("message=cant_login")) {
-                        throw new FriendlyException("Login details for NicoNico are invalid.", COMMON, null);
+                        log.warn("ニコニコのログイン情報が正しくない可能性があります。"
+                                + "config.txt の nicomail / nicopass を確認してください。");
+                        return false;
                     }
 
                     loggedIn.set(true);
+                    log.info("ニコニコへのログインに成功しました。");
+                    return true;
                 }
             } catch (IOException e) {
-                throw new FriendlyException("Exception when trying to log into NicoNico", SUSPICIOUS, e);
+                log.warn("ニコニコへのログイン中にエラーが発生しました: {}。"
+                        + "再生は yt-dlp 側のログインで継続します。", e.toString());
+                return false;
             }
         }
     }

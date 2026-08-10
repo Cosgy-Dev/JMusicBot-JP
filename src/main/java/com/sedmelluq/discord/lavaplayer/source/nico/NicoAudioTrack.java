@@ -49,6 +49,10 @@ import static com.sedmelluq.discord.lavaplayer.tools.FriendlyException.Severity.
  */
 public class NicoAudioTrack extends DelegatedAudioTrack {
     private static final Logger log = LoggerFactory.getLogger(NicoAudioTrack.class);
+    /** yt-dlp のセッション Cookie を保存するファイル名（cache ディレクトリ内） */
+    private static final String COOKIE_FILE_NAME = "niconico.cookies";
+    /** この秒数以内に切れる Cookie は再ログインが必要とみなす */
+    private static final long COOKIE_EXPIRY_MARGIN_SEC = 600;
     private final MediaContainerDescriptor containerTrackFactory;
     private final NicoAudioSourceManager sourceManager;
 
@@ -65,7 +69,11 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
 
     @Override
     public void process(LocalAudioTrackExecutor localExecutor) throws Exception {
-        File playbackUrl = downloadAudio(NicoAudioSourceManager.ytDlpPath);
+        Path ytDlpPath = NicoAudioSourceManager.ytDlpPath;
+        if (ytDlpPath == null) {
+            throw new FriendlyException("yt-dlp が利用できないため、ニコニコ動画を再生できません。", SUSPICIOUS, null);
+        }
+        File playbackUrl = downloadAudio(ytDlpPath);
 
         log.debug("Starting NicoNico track from URL: {}", playbackUrl);
         try (LocalSeekableInputStream inputStream = new LocalSeekableInputStream(playbackUrl)) {
@@ -92,91 +100,26 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
 
             log.info("Downloading NicoNico track via yt-dlp: id={} -> {}", id, outFile);
 
-            // コマンド構築（yt-dlp は自己配置バイナリの絶対パスを使用）
-            List<String> cmd = new ArrayList<>();
-            cmd.add(ytDlpPath.toString());
+            Path cookieFile = cacheDir.resolve(COOKIE_FILE_NAME);
+            boolean hasCredentials = NicoAudioSourceManager.userName != null
+                    && NicoAudioSourceManager.password != null;
+            // 保存済みセッションが生きているうちは資格情報を渡さない。
+            // 毎回ログインするとニコニコ側でレート制限を受けやすいため。
+            boolean useCredentials = hasCredentials && !hasLiveSessionCookie(cookieFile);
 
-            // 実行の安定化オプション
-            Collections.addAll(cmd,
-                    "--no-progress",
-                    "--no-playlist",
-                    "--ignore-config",
-                    "--newline",
-                    "--restrict-filenames",
-                    "--no-overwrites" // 既存ファイル保護（存在時はスキップ）
-            );
+            String result = runYtDlp(ytDlpPath, botRoot, cookieFile, outFile, id, useCredentials);
 
-            // ログイン（任意）
-            if (NicoAudioSourceManager.userName != null && NicoAudioSourceManager.password != null) {
-                cmd.add("--username");
-                cmd.add(NicoAudioSourceManager.userName);
-                cmd.add("--password");
-                cmd.add(NicoAudioSourceManager.password);
-                log.info("ニコニコのログイン情報を使用しました。");
-
-                // TOTP（二段階認証）
-                if (NicoAudioSourceManager.twofactor != null) {
-                    String code = TOTPGenerator.getCode(NicoAudioSourceManager.twofactor);
-                    if (code != null && code.matches("\\d{6}")) {
-                        cmd.add("--twofactor");
-                        cmd.add(code);
-                        log.info("二段階認証を行いました: {}", code);
-                    } else {
-                        log.warn("無効な二段階認証コード: {}", code);
-                    }
-                }
-            }
-
-            // 音声抽出（WAV/最高品質）
-            Collections.addAll(cmd,
-                    "--extract-audio",
-                    "--audio-format", "wav",
-                    "--audio-quality", "0"
-            );
-
-            // 出力先は絶対パスで（相対だと動作環境によりズレるため）
-            cmd.add("--output");
-            cmd.add(outFile.toString());
-
-            // 対象URL
-            cmd.add("https://www.nicovideo.jp/watch/" + id);
-
-            // プロセス実行：エラー/標準出力を一本化して読みやすく
-            ProcessBuilder pb = new ProcessBuilder(cmd);
-            pb.directory(botRoot.toFile());
-            pb.redirectErrorStream(true);
-            Process proc = pb.start();
-
-            StringBuilder logBuf = new StringBuilder(4096);
-            try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream()))) {
-                String line;
-                while ((line = r.readLine()) != null) {
-                    logBuf.append(line).append('\n');
-                    // yt-dlp の進捗は長いので DEBUG で
-                    log.debug(line);
-                }
-            }
-
-            // タイムアウト（必要に応じて変更）
-            boolean finished = proc.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
-            if (!finished) {
-                proc.destroyForcibly();
-                throw new RuntimeException("yt-dlp timed out (300s).");
-            }
-
-            int code = proc.exitValue();
-            if (code != 0) {
-                // 失敗時：部分ファイル掃除
+            // 保存済み Cookie で失敗した場合は、ログインし直して 1 回だけ再試行する
+            if (result != null && !useCredentials && hasCredentials) {
+                log.info("保存済みのニコニコセッションでの取得に失敗しました。ログインし直して再試行します。");
+                safeDelete(cookieFile);
                 safeDeleteIfEmpty(outFile);
-                String tail = tailOf(logBuf, 2000);
-                throw new RuntimeException("yt-dlp failed with exit code " + code + "\n--- output ---\n" + tail);
+                result = runYtDlp(ytDlpPath, botRoot, cookieFile, outFile, id, true);
             }
 
-            // 正常終了でも 0 バイト等は異常として扱う
-            if (!Files.isRegularFile(outFile) || Files.size(outFile) == 0) {
+            if (result != null) {
                 safeDeleteIfEmpty(outFile);
-                String tail = tailOf(logBuf, 2000);
-                throw new RuntimeException("yt-dlp finished but output not found or empty.\n--- output ---\n" + tail);
+                throw new RuntimeException(result);
             }
 
             return outFile.toFile();
@@ -186,7 +129,144 @@ public class NicoAudioTrack extends DelegatedAudioTrack {
         }
     }
 
+    /**
+     * yt-dlp を 1 回実行する。
+     *
+     * @return 成功した場合は null、失敗した場合はエラー内容
+     */
+    private String runYtDlp(Path ytDlpPath, Path botRoot, Path cookieFile, Path outFile,
+                            String id, boolean useCredentials) throws IOException, InterruptedException {
+        // コマンド構築（yt-dlp は自己配置バイナリの絶対パスを使用）
+        List<String> cmd = new ArrayList<>();
+        cmd.add(ytDlpPath.toString());
+
+        // 実行の安定化オプション
+        Collections.addAll(cmd,
+                "--no-progress",
+                "--no-playlist",
+                "--ignore-config",
+                "--newline",
+                "--restrict-filenames",
+                "--no-overwrites" // 既存ファイル保護（存在時はスキップ）
+        );
+
+        // セッションの永続化（再起動をまたいで再ログインを避ける）。
+        // ファイルが無い場合 yt-dlp は読み込みをスキップし、終了時に書き出す。
+        cmd.add("--cookies");
+        cmd.add(cookieFile.toString());
+
+        // ログイン（任意）
+        if (useCredentials) {
+            cmd.add("--username");
+            cmd.add(NicoAudioSourceManager.userName);
+            cmd.add("--password");
+            cmd.add(NicoAudioSourceManager.password);
+            log.info("ニコニコのログイン情報を使用しました。");
+
+            // TOTP（二段階認証）
+            if (NicoAudioSourceManager.twofactor != null) {
+                String code = TOTPGenerator.getCode(NicoAudioSourceManager.twofactor);
+                if (code != null && code.matches("\\d{6}")) {
+                    cmd.add("--twofactor");
+                    cmd.add(code);
+                    log.info("二段階認証コードを生成しました。");
+                } else {
+                    log.warn("無効な二段階認証コードが生成されました。nicotwofactor の設定を確認してください。");
+                }
+            }
+        }
+
+        // 音声抽出（WAV/最高品質）
+        Collections.addAll(cmd,
+                "--extract-audio",
+                "--audio-format", "wav",
+                "--audio-quality", "0"
+        );
+
+        // 出力先は絶対パスで（相対だと動作環境によりズレるため）
+        cmd.add("--output");
+        cmd.add(outFile.toString());
+
+        // 対象URL
+        cmd.add("https://www.nicovideo.jp/watch/" + id);
+
+        // プロセス実行：エラー/標準出力を一本化して読みやすく
+        ProcessBuilder pb = new ProcessBuilder(cmd);
+        pb.directory(botRoot.toFile());
+        pb.redirectErrorStream(true);
+        Process proc = pb.start();
+
+        StringBuilder logBuf = new StringBuilder(4096);
+        try (BufferedReader r = new BufferedReader(
+                new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = r.readLine()) != null) {
+                logBuf.append(line).append('\n');
+                // yt-dlp の進捗は長いので DEBUG で
+                log.debug(line);
+            }
+        }
+
+        // タイムアウト（必要に応じて変更）
+        boolean finished = proc.waitFor(300, java.util.concurrent.TimeUnit.SECONDS);
+        if (!finished) {
+            proc.destroyForcibly();
+            return "yt-dlp timed out (300s).";
+        }
+
+        int code = proc.exitValue();
+        if (code != 0) {
+            return "yt-dlp failed with exit code " + code + "\n--- output ---\n" + tailOf(logBuf, 2000);
+        }
+
+        // 正常終了でも 0 バイト等は異常として扱う
+        if (!Files.isRegularFile(outFile) || Files.size(outFile) == 0) {
+            return "yt-dlp finished but output not found or empty.\n--- output ---\n" + tailOf(logBuf, 2000);
+        }
+
+        return null;
+    }
+
 // --- helpers ---
+
+    /**
+     * Netscape 形式の Cookie ファイルに、有効期限内の {@code user_session} が保存されているかを判定する。
+     */
+    private static boolean hasLiveSessionCookie(Path cookieFile) {
+        if (!Files.isReadable(cookieFile)) {
+            return false;
+        }
+        long threshold = System.currentTimeMillis() / 1000L + COOKIE_EXPIRY_MARGIN_SEC;
+        try (BufferedReader reader = Files.newBufferedReader(cookieFile, StandardCharsets.UTF_8)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.isEmpty() || (line.startsWith("#") && !line.startsWith("#HttpOnly_"))) {
+                    continue;
+                }
+                // domain / flag / path / secure / expiry / name / value
+                String[] fields = line.split("\t");
+                if (fields.length < 7 || !"user_session".equals(fields[5])) {
+                    continue;
+                }
+                try {
+                    if (Long.parseLong(fields[4].trim()) > threshold) {
+                        return true;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // 期限が読めない場合は無効扱い
+                }
+            }
+        } catch (IOException e) {
+            log.debug("ニコニコの Cookie ファイルを読み込めませんでした: {}", e.toString());
+        }
+        return false;
+    }
+
+    private static void safeDelete(Path p) {
+        try {
+            Files.deleteIfExists(p);
+        } catch (IOException ignored) {}
+    }
 
     private static void safeDeleteIfEmpty(Path p) {
         try {
