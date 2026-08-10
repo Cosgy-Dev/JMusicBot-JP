@@ -32,9 +32,11 @@ import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
 import dev.cosgy.jmusicbot.settings.RepeatMode;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
+import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
 
@@ -203,19 +205,56 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
             }
         }
 
+        playNextOrStop();
+    }
+
+    /**
+     * キューの次の曲を再生する。キューが空の場合はデフォルトプレイリストへ、
+     * それも無ければ再生を停止する。
+     * <p>
+     * 通常は {@link #onTrackEnd} から呼ばれるが、再生に失敗したトラックを
+     * スキップする際にも使用する。
+     */
+    public void playNextOrStop() {
         if (queue.isEmpty()) {
             if (!playFromDefault()) {
                 manager.getBot().getNowplayingHandler().onTrackUpdate(guildId, null, this);
                 if (!manager.getBot().getConfig().getStay()) manager.getBot().closeAudioConnection(guildId);
 
-                player.setPaused(false);
+                audioPlayer.setPaused(false);
 
                 Guild guild = guild(manager.getBot().getJDA());
                 Bot.updatePlayStatus(guild, guild.getSelfMember(), PlayStatus.STOPPED);
             }
         } else {
             QueuedTrack qt = queue.pull();
-            player.playTrack(qt.getTrack());
+            audioPlayer.playTrack(qt.getTrack());
+        }
+    }
+
+    /**
+     * 年齢制限や地域制限などで再生できなかったトラックを、設定されたテキストチャンネルへ通知する。
+     * 通知先が無い場合や権限が無い場合は何もしない。
+     */
+    public void notifyTrackFailed(AudioTrack track, String reason) {
+        Guild guild = guild(manager.getBot().getJDA());
+        if (guild == null) return;
+
+        Settings settings = manager.getBot().getSettingsManager().getSettings(guildId);
+        TextChannel tchan = settings == null ? null : settings.getTextChannel(guild);
+        if (tchan == null || !guild.getSelfMember().hasPermission(tchan, Permission.MESSAGE_SEND)) return;
+
+        String title = (track == null || track.getInfo().title == null) ? "不明なトラック" : track.getInfo().title;
+        StringBuilder sb = new StringBuilder(manager.getBot().getConfig().getWarning())
+                .append(" **").append(title).append("** を再生できなかったため、スキップしました。");
+        if (reason != null && !reason.isBlank()) {
+            sb.append("\n理由: ").append(reason);
+        }
+
+        try {
+            tchan.sendMessage(FormatUtil.filter(sb.toString())).queue(null, t -> {});
+        } catch (Exception ignored) {
+            // 通知に失敗してもスキップ自体は続行する
         }
     }
 

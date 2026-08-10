@@ -70,6 +70,8 @@ public class BotConfig {
     private String spClientSecret;
     // [JMusicBot-JP] added useNicoNico, changeNickName, pauseNoUsers, resumeJoined, stopNoUsers, cosgyDevHost, helpToDm, officialInvite
     private boolean useNicoNico, changeNickName, stayInChannel, pauseNoUsers, resumeJoined, stopNoUsers, songInGame, npImages, updatealerts, useEval, dbots, cosgyDevHost, helpToDm, autoStopQueueSave, auditCommands, officialInvite, useinvitecommand;
+    // [JMusicBot-JP] added useVCStatus: ボイスチャンネルのステータス更新を全体で有効にするか
+    private boolean useVCStatus;
     private long owner, maxSeconds, aloneTimeUntilStop;
     private OnlineStatus status;
     private Activity game;
@@ -117,6 +119,7 @@ public class BotConfig {
             status = OtherUtil.parseStatus(config.getString("status"));
             stayInChannel = config.getBoolean("stayinchannel");
             songInGame = config.getBoolean("songinstatus");
+            useVCStatus = config.getBoolean("usevcstatus");
             npImages = config.getBoolean("npimages");
             updatealerts = config.getBoolean("updatealerts");
             useEval = config.getBoolean("eval");
@@ -295,6 +298,14 @@ public class BotConfig {
 
     public boolean getSongInStatus() {
         return songInGame;
+    }
+
+    /**
+     * ボイスチャンネルのチャンネルステータスを更新してよいか。
+     * {@code false} の場合はサーバーごとの設定に関わらず一切更新しない。
+     */
+    public boolean isVCStatusEnabled() {
+        return useVCStatus;
     }
 
     public String getPlaylistsFolder() {

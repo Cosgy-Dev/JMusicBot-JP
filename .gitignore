@@ -10,3 +10,8 @@ nb*.xml
 config.txt
 *.jar
 /logs/
+
+# 実行時に自動生成されるディレクトリ
+/bin/
+/cache/
+/serversettings/

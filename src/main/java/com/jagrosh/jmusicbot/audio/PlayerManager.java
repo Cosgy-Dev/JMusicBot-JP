@@ -489,21 +489,41 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             this.handler = handler;
         }
 
+        /**
+         * 再生もフォールバックもできなかったトラックを諦めて、次の曲へ進める。
+         * <p>
+         * この時点では {@code suppressAutoLeaveOnce} により通常の onTrackEnd が抑制されているため、
+         * 明示的にキューを進めないと再生が止まったままになる。
+         */
+        private void skipFailedTrack(AudioTrack track, String reason) {
+            try {
+                handler.notifyTrackFailed(track, reason);
+            } finally {
+                handler.playNextOrStop();
+            }
+        }
+
         @Override
         public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
             String id = track != null ? track.getIdentifier() : null;
             pm.logger.warn("再生中に例外発生。id={} msg={}", id, exception.getMessage());
 
-            if (!pm.shouldFallbackToYtDlp(track)) return;
-
-            // 次に来る onTrackEnd を一度だけ抑制（退出防止）
-            handler.suppressAutoLeaveOnce();
+            if (!pm.shouldFallbackToYtDlp(track)) {
+                // フォールバックできないので、通常の onTrackEnd に任せて次の曲へ進む
+                handler.notifyTrackFailed(track, exception.getMessage());
+                return;
+            }
 
             if (!attempted.add(id)) {
                 pm.logger.debug("このトラックは既にフォールバックを試行済み: {}", id);
+                handler.notifyTrackFailed(track, exception.getMessage());
                 return;
             }
             if (!fallingBack.compareAndSet(false, true)) return;
+
+            // フォールバックを実際に開始する場合のみ、次に来る onTrackEnd を一度だけ抑制（退出防止）。
+            // ここより前で return すると抑制が残り、キューが進まなくなる。
+            handler.suppressAutoLeaveOnce();
 
             CompletableFuture.runAsync(() -> {
                 try {
@@ -529,13 +549,17 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                         }
                         @Override public void noMatches() {
                             pm.logger.error("ローカル差し替えのロードに失敗（noMatches）: {}", out);
+                            skipFailedTrack(track, "ダウンロードしたファイルを読み込めませんでした。");
                         }
                         @Override public void loadFailed(FriendlyException e) {
                             pm.logger.error("ローカル差し替えのロードに失敗: {}", e.getMessage());
+                            skipFailedTrack(track, e.getMessage());
                         }
                     });
                 } catch (Exception ex) {
                     pm.logger.error("yt-dlpフォールバック（再生中）に失敗: {}", ex.toString());
+                    // フォールバックも失敗したので、そのトラックは諦めて次の曲へ進む
+                    skipFailedTrack(track, exception.getMessage());
                 } finally {
                     fallingBack.set(false);
                 }

@@ -139,7 +139,10 @@ public class NowplayingHandler {
 
         VoiceChannel voiceChannel = (VoiceChannel) chan;
 
-        if(settings.getVCStatus() && guild.getSelfMember().hasPermission(voiceChannel, Permission.VOICE_SET_STATUS)){
+        // config の usevcstatus が false の場合は、サーバーごとの設定に関わらず更新しない
+        boolean vcStatusAllowed = bot.getConfig().isVCStatusEnabled() && settings.getVCStatus();
+
+        if (vcStatusAllowed && guild.getSelfMember().hasPermission(voiceChannel, Permission.VOICE_SET_STATUS)) {
             String text = handler.getTopicFormat(bot.getJDA());
             if (!text.equals(voiceChannel.getStatus())) {
                 try {
