@@ -19,6 +19,7 @@ package dev.cosgy.jmusicbot.util;
 import com.jagrosh.jmusicbot.audio.AudioHandler;
 import com.jagrosh.jmusicbot.audio.QueuedTrack;
 import com.jagrosh.jmusicbot.utils.FormatUtil;
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.settings.RepeatMode;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.entities.MessageEmbed;
@@ -87,9 +88,7 @@ public class QueuePaginatorManager {
         if (ah.getPlayer().getPlayingTrack() != null) {
             eb.setTitle(
                     (ah.getPlayer().isPaused() ? "⏸" : "▶️") + " 再生中: " +
-                            (ah.getPlayer().getPlayingTrack().getInfo().uri.contains("gensokyoradio.net")
-                                    ? "幻想郷ラジオ"
-                                    : ah.getPlayer().getPlayingTrack().getInfo().title)
+                            GensokyoInfoAgent.displayTitle(ah.getPlayer().getPlayingTrack())
             );
         } else {
             eb.setTitle("再生中の曲はありません。");

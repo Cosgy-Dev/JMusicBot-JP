@@ -15,6 +15,7 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.dj;
 
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
@@ -94,13 +95,13 @@ public class PlaynextCmd extends DJCommand {
 
         private void loadSingle(AudioTrack track) {
             if (bot.getConfig().isTooLong(track)) {
-                m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + "(**" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title) + "**) このトラックは許可されている最大長よりも長いです: `"
+                m.editOriginal(FormatUtil.filter(event.getClient().getWarning() + "(**" + GensokyoInfoAgent.displayTitle(track) + "**) このトラックは許可されている最大長よりも長いです: `"
                         + FormatUtil.formatTime(track.getDuration()) + "` > `" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + "`")).queue();
                 return;
             }
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrackToFront(new QueuedTrack(track, event.getUser())) + 1;
-            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + "**" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title)
+            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + "**" + GensokyoInfoAgent.displayTitle(track)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を再生待ちに追加しました。" : "を" + pos + "番目の再生待ちに追加しました。"));
             m.editOriginal(addMsg).queue();
 
@@ -158,13 +159,13 @@ public class PlaynextCmd extends DJCommand {
 
         private void loadSingle(AudioTrack track) {
             if (bot.getConfig().isTooLong(track)) {
-                m.editMessage(FormatUtil.filter(event.getClient().getWarning() + "(**" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title) + "**) このトラックは許可されている最大長よりも長いです: `"
+                m.editMessage(FormatUtil.filter(event.getClient().getWarning() + "(**" + GensokyoInfoAgent.displayTitle(track) + "**) このトラックは許可されている最大長よりも長いです: `"
                         + FormatUtil.formatTime(track.getDuration()) + "` > `" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + "`")).queue();
                 return;
             }
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrackToFront(new QueuedTrack(track, event.getAuthor())) + 1;
-            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + "**" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title)
+            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + "**" + GensokyoInfoAgent.displayTitle(track)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を再生待ちに追加しました。" : "を" + pos + "番目の再生待ちに追加しました。"));
             m.editMessage(addMsg).queue();
 

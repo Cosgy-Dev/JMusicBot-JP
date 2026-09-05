@@ -347,6 +347,9 @@ public class BotConfig {
     public boolean isTooLong(AudioTrack track) {
         if (maxSeconds <= 0)
             return false;
+        // ライブストリームは長さが不定 (Long.MAX_VALUE) のため、再生時間の上限は適用しない
+        if (track.getInfo() != null && track.getInfo().isStream)
+            return false;
         return Math.round(track.getDuration() / 1000.0) > maxSeconds;
     }
 

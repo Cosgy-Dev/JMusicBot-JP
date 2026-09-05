@@ -46,17 +46,6 @@ public class FormatUtil {
         return (hours > 0 ? hours + ":" : "") + (minutes < 10 ? "0" + minutes : minutes) + ":" + (seconds < 10 ? "0" + seconds : seconds);
     }
 
-    public static String formatTime(int duration) {
-        if (duration == Integer.MAX_VALUE)
-            return "LIVE";
-        int seconds = duration;
-        int hours = seconds / (60 * 60);
-        seconds %= 60 * 60;
-        int minutes = seconds / 60;
-        seconds %= 60;
-        return (hours > 0 ? hours + ":" : "") + (minutes < 10 ? "0" + minutes : minutes) + ":" + (seconds < 10 ? "0" + seconds : seconds);
-    }
-
     public static String progressBar(double percent) {
         StringBuilder str = new StringBuilder();
         for (int i = 0; i < 12; i++)

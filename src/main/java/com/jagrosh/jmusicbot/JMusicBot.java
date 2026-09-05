@@ -181,6 +181,7 @@ public class JMusicBot {
             //add(new UserInfo());
             add(new CashCmd(bot));
             // Music
+            add(new GensokyoCmd(bot));
             add(new LyricsCmd(bot));
             add(new NowplayingCmd(bot));
             add(new PlayCmd(bot));

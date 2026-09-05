@@ -15,6 +15,7 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.Command;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommand;
@@ -279,7 +280,7 @@ public class PlayCmd extends MusicCommand {
             // too-long checks remain the same
             if (bot.getConfig().isTooLong(track)) {
                 m.editOriginal(FormatUtil.filter(event.getClient().getWarning() +
-                                " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
+                                " **" + GensokyoInfoAgent.displayTitle(track)
                                 + "**`(" + FormatUtil.formatTime(track.getDuration()) + ")` は設定された長さ`(" + FormatUtil.formatTime(bot.getConfig().getMaxSeconds() * 1000) + ")` を超えています。"))
                         .queue();
                 return;
@@ -287,7 +288,7 @@ public class PlayCmd extends MusicCommand {
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrack(new QueuedTrack(track, event.getUser())) + 1;
 
-            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*") ? "幻想郷ラジオ" : track.getInfo().title)
+            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + GensokyoInfoAgent.displayTitle(track)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
 
             // If there is no playlist or we cannot send buttons, simply edit the message
@@ -409,7 +410,7 @@ public class PlayCmd extends MusicCommand {
             }
             AudioHandler handler = (AudioHandler) event.getGuild().getAudioManager().getSendingHandler();
             int pos = handler.addTrack(new QueuedTrack(track, event.getAuthor())) + 1;
-            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + (track.getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : track.getInfo().title)
+            String addMsg = FormatUtil.filter(event.getClient().getSuccess() + " **" + GensokyoInfoAgent.displayTitle(track)
                     + "** (`" + FormatUtil.formatTime(track.getDuration()) + "`) " + (pos == 0 ? "を追加しました。" : "を再生待ちの" + pos + "番目に追加しました。 "));
 
             // If no playlist or cannot send components, just edit the message

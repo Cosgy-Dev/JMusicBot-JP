@@ -19,6 +19,7 @@ import com.jagrosh.jmusicbot.Bot;
 import com.jagrosh.jmusicbot.entities.Pair;
 import com.jagrosh.jmusicbot.settings.Settings;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
+import dev.cosgy.agent.GensokyoInfoAgent;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Activity;
 import net.dv8tion.jda.api.entities.Guild;
@@ -205,8 +206,9 @@ public class NowplayingHandler {
         if (bot.getConfig().getSongInStatus()) {
             if (track != null && bot.getJDA().getGuilds().stream().filter(g -> { GuildVoiceState vs = g.getSelfMember().getVoiceState(); return vs != null && vs.inAudioChannel(); }).limit(2).count() <= 1)
 
-                if (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*")) {
-                    bot.getJDA().getPresence().setActivity(Activity.listening("幻想郷ラジオ"));
+                // ステータスの更新はトラック開始時のみのため、曲名ではなく局名を表示する
+                if (GensokyoInfoAgent.isGensokyoRadio(track)) {
+                    bot.getJDA().getPresence().setActivity(Activity.listening(GensokyoInfoAgent.DISPLAY_NAME));
                 } else {
                     bot.getJDA().getPresence().setActivity(Activity.listening(track.getInfo().title));
                 }

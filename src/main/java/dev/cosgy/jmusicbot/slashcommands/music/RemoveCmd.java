@@ -15,6 +15,7 @@
  */
 package dev.cosgy.jmusicbot.slashcommands.music;
 
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.CommandEvent;
 import dev.cosgy.jmusicbot.framework.jdautilities.command.SlashCommandEvent;
 import com.jagrosh.jmusicbot.Bot;
@@ -79,7 +80,7 @@ public class RemoveCmd extends MusicCommand {
         QueuedTrack qt = handler.getQueue().get(pos - 1);
         if (qt.getIdentifier() == event.getAuthor().getIdLong()) {
             handler.getQueue().remove(pos - 1);
-            event.replySuccess("**" + (qt.getTrack().getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : qt.getTrack().getInfo().title) + "**をキューから削除しました。");
+            event.replySuccess("**" + GensokyoInfoAgent.displayTitle(qt.getTrack()) + "**をキューから削除しました。");
         } else if (isDJ) {
             handler.getQueue().remove(pos - 1);
             User u;
@@ -91,7 +92,7 @@ public class RemoveCmd extends MusicCommand {
             event.replySuccess("**" + qt.getTrack().getInfo().title
                     + "**を再生待ちから削除しました。\n(この曲は" + (u == null ? "誰かがリクエストしました。" : "**" + u.getName() + "**がリクエストしました。") + ")");
         } else {
-            event.replyError("**" + (qt.getTrack().getInfo().uri.contains("https://stream.gensokyoradio.net/") ? "幻想郷ラジオ" : qt.getTrack().getInfo().title) + "** を削除できませんでした。理由: DJ権限を持っていますか？自分のリクエスト以外は削除できません。");
+            event.replyError("**" + GensokyoInfoAgent.displayTitle(qt.getTrack()) + "** を削除できませんでした。理由: DJ権限を持っていますか？自分のリクエスト以外は削除できません。");
         }
     }
 

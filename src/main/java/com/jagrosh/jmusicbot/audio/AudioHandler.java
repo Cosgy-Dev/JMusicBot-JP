@@ -29,6 +29,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import com.sedmelluq.discord.lavaplayer.track.playback.AudioFrame;
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.settings.RepeatMode;
 import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
@@ -39,6 +40,8 @@ import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
 import net.dv8tion.jda.api.utils.messages.MessageCreateData;
+
+import java.awt.Color;
 
 import java.nio.ByteBuffer;
 import java.util.HashSet;
@@ -51,6 +54,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author John Grosh
  */
 public class AudioHandler extends AudioEventAdapter implements AudioSendHandler {
+    /** 幻想郷ラジオ再生中の Embed に使う色。 */
+    private static final Color GENSOKYO_COLOR = new Color(66, 16, 80);
+
     private final FairQueue<QueuedTrack> queue = new FairQueue<>();
     private final List<AudioTrack> defaultQueue = new LinkedList<>();
     private final Set<String> votes = new HashSet<>();
@@ -409,6 +415,10 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     @Override
     public void onTrackStart(AudioPlayer player, AudioTrack track) {
         votes.clear();
+        // 幻想郷ラジオの場合は、表示に使う曲情報の取得を先に開始させておく
+        if (GensokyoInfoAgent.isGensokyoRadio(track)) {
+            GensokyoInfoAgent.markActive();
+        }
         manager.getBot().getNowplayingHandler().onTrackUpdate(guildId, track, this);
 
         Guild guild = guild(manager.getBot().getJDA());
@@ -426,7 +436,7 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
             eb.setColor(guild.getSelfMember().getColor());
             RequestMetadata rm = getRequestMetadata();
 
-            if (!track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*")) {
+            if (!GensokyoInfoAgent.isGensokyoRadio(track)) {
                 if (rm.getOwner() != 0L) {
                     User u = guild.getJDA().getUserById(rm.user.id);
                     if (u == null)
@@ -482,28 +492,54 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
                     else
                         eb.setAuthor(u.getName(), null, u.getEffectiveAvatarUrl());
                 }
-                try {
-                    eb.setTitle(track.getInfo().title, track.getInfo().uri);
-                } catch (Exception e) {
-                    eb.setTitle(track.getInfo().title);
-                }
-
-                if (track instanceof YoutubeAudioTrack && manager.getBot().getConfig().useNPImages()) {
-                    eb.setThumbnail("https://img.youtube.com/vi/" + track.getIdentifier() + "/maxresdefault.jpg");
-                }
-
-                if (track.getInfo().author != null && !track.getInfo().author.isEmpty())
-                    eb.setFooter("出典: " + track.getInfo().author, null);
-
-                double progress = (double) audioPlayer.getPlayingTrack().getPosition() / track.getDuration();
-                eb.setDescription((audioPlayer.isPaused() ? JMusicBot.PAUSE_EMOJI : JMusicBot.PLAY_EMOJI)
-                        + " " + FormatUtil.progressBar(progress)
-                        + " `[" + FormatUtil.formatTime(track.getPosition()) + "/" + FormatUtil.formatTime(track.getDuration()) + "]` "
-                        + FormatUtil.volumeIcon(audioPlayer.getVolume()));
+                buildGensokyoRadioEmbed(eb);
             }
 
             return mb.addEmbeds(eb.build()).build();
         } else return null;
+    }
+
+    /**
+     * 幻想郷ラジオ再生中の Embed を組み立てる。曲情報が未取得の場合でも
+     * 最低限の表示になるようにフォールバックする。
+     */
+    private void buildGensokyoRadioEmbed(EmbedBuilder eb) {
+        GensokyoInfoAgent.Snapshot info = GensokyoInfoAgent.getInfo();
+        eb.setColor(GENSOKYO_COLOR)
+                .setFooter("コンテンツはgensokyoradio.netによって提供されています。"
+                        + "\nGRロゴはGensokyo Radioの商標です。"
+                        + "\nGensokyo Radio is © LunarSpotlight.", null);
+
+        if (info == null || info.title() == null) {
+            eb.setTitle(GensokyoInfoAgent.DISPLAY_NAME, GensokyoInfoAgent.SITE_URL)
+                    .setDescription((audioPlayer.isPaused() ? JMusicBot.PAUSE_EMOJI : JMusicBot.PLAY_EMOJI)
+                            + " [LIVE] " + FormatUtil.volumeIcon(audioPlayer.getVolume()));
+            return;
+        }
+
+        try {
+            eb.setTitle(info.title(), GensokyoInfoAgent.SITE_URL);
+        } catch (IllegalArgumentException e) {
+            eb.setTitle(info.title());
+        }
+        if (info.album() != null) eb.addField("アルバム", info.album(), true);
+        if (info.artist() != null) eb.addField("アーティスト", info.artist(), true);
+        if (info.circle() != null) eb.addField("サークル", info.circle(), true);
+        if (info.year() != null) eb.addField("リリース", info.year(), true);
+
+        eb.setDescription((audioPlayer.isPaused() ? JMusicBot.PAUSE_EMOJI : JMusicBot.PLAY_EMOJI)
+                + " " + FormatUtil.progressBar(info.progress())
+                + " `[" + FormatUtil.formatTime(info.playedSeconds() * 1000L)
+                + "/" + FormatUtil.formatTime(info.durationSeconds() * 1000L) + "]` "
+                + FormatUtil.volumeIcon(audioPlayer.getVolume()));
+
+        if (manager.getBot().getConfig().useNPImages() && info.albumArtUrl() != null) {
+            try {
+                eb.setImage(info.albumArtUrl());
+            } catch (IllegalArgumentException ignored) {
+                // アルバムアートのURLが不正でも再生情報の表示は続行する
+            }
+        }
     }
 
     public MessageCreateData getNoMusicPlaying(JDA jda) {
@@ -523,8 +559,8 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
             long userid = getRequestMetadata().getOwner();
             AudioTrack track = audioPlayer.getPlayingTrack();
 
-            if (track.getInfo().uri.matches(".*stream.gensokyoradio.net/.*")) {
-                return "**幻想郷ラジオ** [" + (userid == 0 ? "自動再生" : "<@" + userid + ">") + "]"
+            if (GensokyoInfoAgent.isGensokyoRadio(track)) {
+                return "**" + GensokyoInfoAgent.DISPLAY_NAME + "** [" + (userid == 0 ? "自動再生" : "<@" + userid + ">") + "]"
                         + "\n" + (audioPlayer.isPaused() ? JMusicBot.PAUSE_EMOJI : JMusicBot.PLAY_EMOJI) + " "
                         + "[LIVE] "
                         + FormatUtil.volumeIcon(audioPlayer.getVolume());

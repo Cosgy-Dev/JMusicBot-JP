@@ -20,7 +20,6 @@ import com.jagrosh.jmusicbot.utils.FormatUtil;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack;
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackInfo;
 import dev.cosgy.agent.GensokyoInfoAgent;
-import dev.cosgy.agent.objects.ResultSet;
 import net.dv8tion.jda.api.entities.User;
 
 /**
@@ -49,26 +48,20 @@ public class QueuedTrack implements Queueable {
 
     @Override
     public String toString() {
+        String owner = " - <@" + track.getUserData(RequestMetadata.class).getOwner() + ">";
 
-        if (track.getInfo().uri.contains("https://stream.gensokyoradio.net/")) {
-
-            ResultSet data = null;
-            try {
-                data = GensokyoInfoAgent.getInfo();
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
-
-            String title = data.getSonginfo().getTitle();
-            String titleUrl = data.getMisc().getCirclelink().equals("") ?
-                    "https://gensokyoradio.net/" :
-                    data.getMisc().getCirclelink();
-            return "`[" + FormatUtil.formatTime(data.getSongtimes().getDuration()) + "]` [**" + title + "**](" + titleUrl + ") - <@" + track.getUserData(RequestMetadata.class).getOwner() + ">";
+        if (GensokyoInfoAgent.isGensokyoRadio(track)) {
+            // 情報が未取得でもキューの表示は止めない
+            GensokyoInfoAgent.Snapshot data = GensokyoInfoAgent.getInfo();
+            String title = data == null || data.title() == null
+                    ? GensokyoInfoAgent.DISPLAY_NAME : data.title();
+            String length = data == null ? "LIVE" : FormatUtil.formatTime(data.durationSeconds() * 1000L);
+            return "`[" + length + "]` [**" + title + "**](" + GensokyoInfoAgent.SITE_URL + ")" + owner;
         }
 
-        String entry = "`[" + FormatUtil.formatTime(track.getDuration()) + "]` ";
         AudioTrackInfo trackInfo = track.getInfo();
+        String entry = "`[" + FormatUtil.formatTime(track.getDuration()) + "]` ";
         entry = entry + (trackInfo.uri.startsWith("http") ? "[**" + trackInfo.title + "**](" + trackInfo.uri + ")" : "**" + trackInfo.title + "**");
-        return entry + " - <@" + track.getUserData(RequestMetadata.class).getOwner() + ">";
+        return entry + owner;
     }
 }
