@@ -13,8 +13,8 @@ public class FormatUtilTest {
     }
 
     @Test
-    public void formatTimeIntSupportsHours() {
-        assertEquals("1:01:01", FormatUtil.formatTime(3661));
+    public void formatTimeSupportsHours() {
+        assertEquals("1:01:01", FormatUtil.formatTime(3_661_000L));
     }
 
     @Test
