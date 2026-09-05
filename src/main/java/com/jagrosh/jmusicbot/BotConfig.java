@@ -66,6 +66,7 @@ public class BotConfig {
     private String ytPass;
     private boolean youtubeOauth2;
     private String youtubeOauth2RefreshToken;
+    private String ytCipherUrl;
     private String spClientId;
     private String spClientSecret;
     // [JMusicBot-JP] added useNicoNico, changeNickName, pauseNoUsers, resumeJoined, stopNoUsers, cosgyDevHost, helpToDm, officialInvite
@@ -151,6 +152,7 @@ public class BotConfig {
             ytPass = config.getString("ytpass");
             youtubeOauth2 = config.getBoolean("youtubeoauth2");
             youtubeOauth2RefreshToken = config.getString("youtubeoauth2refreshtoken");
+            ytCipherUrl = config.getString("ytcipherurl");
             spClientId = config.getString("spclient");
             spClientSecret = config.getString("spsecret");
 
@@ -390,6 +392,14 @@ public class BotConfig {
 
     public String getYouTubeOauth2RefreshToken() {
         return youtubeOauth2RefreshToken;
+    }
+
+    /**
+     * YouTubeの署名解読を任せる外部サービスのURL。
+     * 未設定なら {@code null} を返し、Bot内蔵の解読処理を使用する。
+     */
+    public String getYouTubeCipherUrl() {
+        return ytCipherUrl == null || ytCipherUrl.isBlank() ? null : ytCipherUrl.trim();
     }
 
     public String getSpotifyClientId(){return spClientId;}

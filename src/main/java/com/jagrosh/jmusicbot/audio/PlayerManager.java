@@ -27,6 +27,7 @@ import com.sedmelluq.discord.lavaplayer.tools.Units;
 import com.sedmelluq.discord.lavaplayer.track.*;
 import dev.cosgy.jmusicbot.util.YtDlpManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
+import dev.lavalink.youtube.cipher.RemoteCipherManager;
 import dev.lavalink.youtube.clients.*;
 import net.dv8tion.jda.api.entities.Guild;
 import org.slf4j.Logger;
@@ -127,6 +128,18 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
         YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(true);
         yt.setPlaylistPageCount(10);
+
+        // YouTube の署名解読を外部サービスへ任せる。
+        // YouTube 側の仕様変更で解読に失敗しても、Bot を更新せずに追従できる。
+        String cipherUrl = bot.getConfig().getYouTubeCipherUrl();
+        if (cipherUrl != null) {
+            try {
+                yt.setCipherManager(new RemoteCipherManager(cipherUrl));
+                logger.info("YouTubeの署名解読に外部サービスを使用します: {}", cipherUrl);
+            } catch (Exception e) {
+                logger.error("YouTube署名解読サービスの設定に失敗しました。内蔵の解読処理を使用します: {}", cipherUrl, e);
+            }
+        }
         if (bot.getConfig().isYouTubeOauth2Enabled()) {
             String refreshToken = bot.getConfig().getYouTubeOauth2RefreshToken();
             yt.useOauth2(refreshToken == null || refreshToken.isBlank() ? null : refreshToken, false);
