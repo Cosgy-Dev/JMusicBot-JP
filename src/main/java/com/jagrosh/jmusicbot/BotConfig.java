@@ -44,6 +44,8 @@ public class BotConfig {
     private final static String START_TOKEN = "/// START OF JMUSICBOT-JP CONFIG ///";
     private final static String END_TOKEN = "/// END OF JMUSICBOT-JP CONFIG ///";
     private final static String CONFIG_VERSION_KEY = "configversion";
+    /** YouTubeの署名解読を任せる外部サービスの既定URL。 */
+    private final static String DEFAULT_YT_CIPHER_URL = "https://cipher.kikkia.dev/";
     private final Prompt prompt;
     private Path path = null;
     // [JMusicBot-JP] added nicoEmail, nicoPass
@@ -396,10 +398,12 @@ public class BotConfig {
 
     /**
      * YouTubeの署名解読を任せる外部サービスのURL。
-     * 未設定なら {@code null} を返し、Bot内蔵の解読処理を使用する。
+     * <p>
+     * youtube-source が署名解読を内蔵しなくなったため、この機能は無効にできない。
+     * 未設定の場合は既定のサービスを返す。
      */
     public String getYouTubeCipherUrl() {
-        return ytCipherUrl == null || ytCipherUrl.isBlank() ? null : ytCipherUrl.trim();
+        return ytCipherUrl == null || ytCipherUrl.isBlank() ? DEFAULT_YT_CIPHER_URL : ytCipherUrl.trim();
     }
 
     public String getSpotifyClientId(){return spClientId;}
