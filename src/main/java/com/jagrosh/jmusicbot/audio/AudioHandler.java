@@ -45,7 +45,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author John Grosh
@@ -60,8 +60,55 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     private final String stringGuildId;
     private AudioFrame lastFrame;
 
-    // 置き換え時の“1回だけ退出抑制”フラグ
-    private final AtomicBoolean suppressAutoLeaveOnce = new AtomicBoolean(false);
+    // ==== 再生失敗時の yt-dlp フォールバック状態 ====
+
+    /** フォールバックの契機 */
+    public enum FallbackOrigin {
+        /** 再生中に例外が発生し、トラックは（間もなく）終了する */
+        EXCEPTION,
+        /** トラックがスタックしているが、まだ再生中扱いのまま */
+        STUCK
+    }
+
+    /** {@link #beginFallback} の結果 */
+    public enum FallbackBegin {
+        /** 新たにフォールバックを開始した */
+        STARTED,
+        /** 同じトラックのフォールバックが既に進行中 */
+        ALREADY_PENDING,
+        /** 別トラックのフォールバックが進行中のため開始できない */
+        BUSY
+    }
+
+    private enum FallbackPhase {
+        /** ダウンロード中。終了イベントはまだ処理していない */
+        PENDING,
+        /** 対象トラックの終了イベントを処理済み */
+        ENDED,
+        /** フォールバック側が結果を確定した */
+        RESOLVED
+    }
+
+    /**
+     * 進行中のフォールバック 1 件分の状態。
+     * <p>
+     * 終了イベント（lavaplayer の送信スレッド）とダウンロード完了（ワーカースレッド）は
+     * どちらが先に来るか分からないため、{@link #phase} の CAS でどちらか一方だけが
+     * 「キューを進める責任」を持つようにしている。
+     */
+    private static final class FallbackState {
+        final AudioTrack track;
+        volatile FallbackOrigin origin;
+        final AtomicReference<FallbackPhase> phase = new AtomicReference<>(FallbackPhase.PENDING);
+
+        FallbackState(AudioTrack track, FallbackOrigin origin) {
+            this.track = track;
+            this.origin = origin;
+        }
+    }
+
+    /** 進行中のフォールバック（ギルドごとに同時に 1 つ） */
+    private final AtomicReference<FallbackState> fallback = new AtomicReference<>();
 
     protected AudioHandler(PlayerManager manager, Guild guild, AudioPlayer player) {
         this.manager = manager;
@@ -70,9 +117,94 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         this.stringGuildId = guild.getId();
     }
 
-    // 置き換え直前に呼ぶ
-    public void suppressAutoLeaveOnce() {
-        this.suppressAutoLeaveOnce.set(true);
+    /**
+     * 再生に失敗した（またはスタックした）トラックのフォールバックを開始する。
+     * <p>
+     * {@link FallbackOrigin#EXCEPTION} の場合、以降に来る対象トラックの終了イベントでは
+     * キューを進めず、退出もしない。結果は {@link #completeFallback} か {@link #failFallback} で
+     * 必ず確定させること。
+     */
+    public FallbackBegin beginFallback(AudioTrack track, FallbackOrigin origin) {
+        FallbackState fresh = new FallbackState(track, origin);
+        while (true) {
+            FallbackState current = fallback.get();
+            if (current != null) {
+                if (current.track == track) {
+                    // スタック中のトラックが例外で終了した → 終了イベントを抑制する側へ昇格
+                    if (origin == FallbackOrigin.EXCEPTION) current.origin = FallbackOrigin.EXCEPTION;
+                    return FallbackBegin.ALREADY_PENDING;
+                }
+                return FallbackBegin.BUSY;
+            }
+            if (fallback.compareAndSet(null, fresh)) break;
+        }
+        // lavaplayer は例外イベントより先に終了イベントを配送することがある。
+        // その場合は既にキューが進んでいるので、抑制済み扱いにしておく。
+        if (origin == FallbackOrigin.EXCEPTION && audioPlayer.getPlayingTrack() != track) {
+            fresh.phase.compareAndSet(FallbackPhase.PENDING, FallbackPhase.ENDED);
+        }
+        return FallbackBegin.STARTED;
+    }
+
+    /**
+     * フォールバックで取得した差し替えトラックを再生する。
+     *
+     * @return 差し替え再生またはキュー投入した場合 true。停止・スキップ等で不要になり破棄した場合 false
+     */
+    public boolean completeFallback(AudioTrack failedTrack, AudioTrack replacement) {
+        FallbackState state = fallback.get();
+        if (state == null || state.track != failedTrack) return false; // stop / skip 等で破棄済み
+        fallback.compareAndSet(state, null);
+
+        boolean ended = !state.phase.compareAndSet(FallbackPhase.PENDING, FallbackPhase.RESOLVED);
+        AudioTrack current = audioPlayer.getPlayingTrack();
+
+        if (current == failedTrack) {
+            // まだ再生中扱い（スタック中、またはバッファ残りを再生中）→ その場で差し替え（REPLACED）
+            audioPlayer.startTrack(replacement, false);
+            return true;
+        }
+        if (state.origin == FallbackOrigin.STUCK) {
+            // スタックしていたトラックは自力で終わった（または操作された）ので差し替え不要
+            return false;
+        }
+        if (current != null) {
+            // 別のトラックが再生中（利用者の操作など）→ 次に再生されるようキュー先頭へ
+            queue.addAt(0, new QueuedTrack(replacement, extractRequestMetadata(replacement)));
+            return true;
+        }
+        if (ended) {
+            // 終了イベントを抑制して待たせていた → ここから再開する
+            Guild guild = guild(manager.getBot().getJDA());
+            if (guild == null || !guild.getSelfMember().getVoiceState().inAudioChannel()) return false;
+            audioPlayer.playTrack(replacement);
+            return true;
+        }
+        // 終了イベントを処理中 → 通常の進行がキュー先頭から拾う
+        queue.addAt(0, new QueuedTrack(replacement, extractRequestMetadata(replacement)));
+        return true;
+    }
+
+    /**
+     * フォールバックに失敗したトラックを諦め、利用者へ通知して次の曲へ進める。
+     */
+    public void failFallback(AudioTrack failedTrack, String reason) {
+        FallbackState state = fallback.get();
+        if (state == null || state.track != failedTrack) return; // stop / skip 等で破棄済み
+        fallback.compareAndSet(state, null);
+
+        boolean ended = !state.phase.compareAndSet(FallbackPhase.PENDING, FallbackPhase.RESOLVED);
+        notifyTrackFailed(failedTrack, reason);
+
+        AudioTrack current = audioPlayer.getPlayingTrack();
+        if (current == failedTrack) {
+            // スタック中 / バッファ残り再生中 → 停止し、通常の終了処理（STOPPED）に次を任せる
+            audioPlayer.stopTrack();
+        } else if (ended && current == null) {
+            // 終了イベントを抑制していた → 明示的にキューを進める
+            playNextOrStop();
+        }
+        // それ以外: 終了イベントが通常どおりキューを進める（または別トラックが再生中）
     }
 
     public int addTrackToFront(QueuedTrack qtrack) {
@@ -125,6 +257,7 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     public void stopAndClear() {
         queue.clear();
         defaultQueue.clear();
+        fallback.set(null); // 進行中のフォールバック結果は破棄する
         audioPlayer.stopTrack();
 
         Guild guild = guild(manager.getBot().getJDA());
@@ -184,9 +317,24 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     // Audio Events
     @Override
     public void onTrackEnd(AudioPlayer player, AudioTrack track, AudioTrackEndReason endReason) {
-        // ★ 置き換え（REPLACED）や一時抑制時は退出ロジックをスキップ
-        if (endReason == AudioTrackEndReason.REPLACED || suppressAutoLeaveOnce.getAndSet(false)) {
+        // ★ 置き換え（REPLACED）時は退出ロジックをスキップ
+        if (endReason == AudioTrackEndReason.REPLACED) {
             return;
+        }
+
+        FallbackState state = fallback.get();
+        if (state != null && state.track == track) {
+            if (!endReason.mayStartNext) {
+                // 利用者の skip / stop やプレイヤー破棄。フォールバック結果は破棄し、通常どおり進める
+                fallback.compareAndSet(state, null);
+            } else if (state.phase.compareAndSet(FallbackPhase.PENDING, FallbackPhase.ENDED)) {
+                if (state.origin == FallbackOrigin.EXCEPTION) {
+                    // 差し替え再生の準備中。キューを進めず、退出もしない
+                    return;
+                }
+                // スタックしていたトラックが自力で再生を終えた → フォールバックは不要
+                fallback.compareAndSet(state, null);
+            }
         }
 
         RepeatMode repeatMode = manager.getBot().getSettingsManager().getSettings(guildId).getRepeatMode();
@@ -212,8 +360,8 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
      * キューの次の曲を再生する。キューが空の場合はデフォルトプレイリストへ、
      * それも無ければ再生を停止する。
      * <p>
-     * 通常は {@link #onTrackEnd} から呼ばれるが、再生に失敗したトラックを
-     * スキップする際にも使用する。
+     * 通常は {@link #onTrackEnd} から呼ばれるが、フォールバックに失敗したトラックを
+     * スキップする際（{@link #failFallback}）にも使用する。
      */
     public void playNextOrStop() {
         if (queue.isEmpty()) {

@@ -24,6 +24,7 @@ import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
+import com.sedmelluq.discord.lavaplayer.tools.Units;
 import com.sedmelluq.discord.lavaplayer.track.*;
 import dev.cosgy.jmusicbot.util.YtDlpManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
@@ -34,15 +35,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
 public class PlayerManager extends DefaultAudioPlayerManager {
@@ -51,8 +50,38 @@ public class PlayerManager extends DefaultAudioPlayerManager {
     /** ニコニコ動画の動画ID（sm/nm/so + 数字） */
     private static final Pattern NICO_ID_PATTERN = Pattern.compile("^(?:sm|nm|so)[0-9]+$");
 
+    /** yt-dlp 1 回あたりの実行時間上限（秒）。-Djmusicbot.ytdlp.timeoutSec で変更可 */
+    private static final long YTDLP_TIMEOUT_SEC = Math.max(30, Long.getLong("jmusicbot.ytdlp.timeoutSec", 300L));
+    /** 同時に実行する yt-dlp プロセス数の上限。-Djmusicbot.ytdlp.maxConcurrent で変更可 */
+    private static final int YTDLP_MAX_CONCURRENT = Math.max(1, Integer.getInteger("jmusicbot.ytdlp.maxConcurrent", 3));
+    /** yt-dlp 取得失敗を記憶しておく時間（一時的な失敗） */
+    private static final long FAILURE_TTL_MS = TimeUnit.MINUTES.toMillis(10);
+    /** yt-dlp 取得失敗を記憶しておく時間（再試行しても解決しない失敗） */
+    private static final long PERMANENT_FAILURE_TTL_MS = TimeUnit.HOURS.toMillis(1);
+    /** キャッシュ済みファイルとして探す拡張子（yt-dlp の出力形式順） */
+    private static final List<String> CACHE_EXTENSIONS =
+            List.of("webm", "m4a", "opus", "ogg", "mp4", "mp3", "aac", "flac", "wav");
+    /** 抽出方法を変えて再試行しても結果が変わらない yt-dlp のエラー */
+    private static final Pattern PERMANENT_ERROR = Pattern.compile(
+            "(?i)video unavailable|private video|has been removed|this video is not available"
+                    + "|sign in to confirm your age|age-restricted|members-only|join this channel"
+                    + "|copyright|is not a valid url|unsupported url|premieres? in|this live event will begin");
+
     private final Bot bot;
     private final Logger logger = LoggerFactory.getLogger(this.getClass());
+
+    /** 直近で yt-dlp 取得に失敗した動画（キー → 記録の失効時刻 epoch millis） */
+    private final ConcurrentHashMap<String, Long> recentFailures = new ConcurrentHashMap<>();
+    /** 進行中の yt-dlp ダウンロード（キー → 完了 Future）。同じ動画の同時ダウンロードを 1 本にまとめる */
+    private final ConcurrentHashMap<String, CompletableFuture<Path>> inFlightDownloads = new ConcurrentHashMap<>();
+    /** 同時実行する yt-dlp プロセス数を制限する */
+    private final Semaphore ytDlpSlots = new Semaphore(YTDLP_MAX_CONCURRENT);
+    /** 再生中フォールバック用ワーカー。長時間ブロックする処理を common pool に載せない */
+    private final ExecutorService fallbackExecutor = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "yt-dlp-fallback");
+        t.setDaemon(true);
+        return t;
+    });
 
     // yt-dlp
     private Path ytDlpPath;
@@ -217,8 +246,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             handler = new AudioHandler(this, guild, player);
             player.addListener(handler);
 
-            // 再生中例外→フォールバック
-            player.addListener(new YtDlpExceptionListener(this, player, handler));
+            // 再生中例外 / スタック → フォールバック
+            player.addListener(new YtDlpExceptionListener(this, handler));
 
             guild.getAudioManager().setSendingHandler(handler);
         } else {
@@ -265,6 +294,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         if (sourceManager != null && !YOUTUBE_SOURCE_NAME.equals(sourceManager.getSourceName())) {
             return false;
         }
+        // ライブ配信は yt-dlp でダウンロードしても終わらない（タイムアウトまで待たせるだけ）
+        if (track.getInfo() != null && track.getInfo().isStream) return false;
         return shouldFallbackToYtDlp(track.getIdentifier());
     }
 
@@ -290,7 +321,19 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 throw new IllegalStateException("yt-dlp出力が見つかりません: " + out);
 
             // LocalSource は file:// ではなく絶対パス文字列を期待
-            super.loadItemOrdered(orderingKey, out.toAbsolutePath().toString(), handler);
+            super.loadItemOrdered(orderingKey, out.toAbsolutePath().toString(), new AudioLoadResultHandler() {
+                @Override public void trackLoaded(AudioTrack track) { handler.trackLoaded(track); }
+                @Override public void playlistLoaded(AudioPlaylist playlist) { handler.playlistLoaded(playlist); }
+                @Override public void noMatches() {
+                    // 壊れたキャッシュを次回も使い続けないよう削除する
+                    invalidateCache(out);
+                    handler.noMatches();
+                }
+                @Override public void loadFailed(FriendlyException e) {
+                    invalidateCache(out);
+                    handler.loadFailed(e);
+                }
+            });
         } catch (Exception ex) {
             logger.error("yt-dlpフォールバックに失敗: {}", ex.toString());
             if (cause != null) {
@@ -305,12 +348,103 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         }
     }
 
+    /**
+     * yt-dlp で音声を取得し、ローカルファイルのパスを返す。
+     * <ul>
+     *   <li>キャッシュ済みならダウンロードしない</li>
+     *   <li>同じ動画のダウンロードが進行中ならその完了を待つ（同じ出力先へ多重書き込みしない）</li>
+     *   <li>直近に失敗した動画は即座に失敗させ、無駄な再実行で待たせない</li>
+     * </ul>
+     */
     Path downloadViaYtDlp(String input) throws Exception {
+        if (ytDlpPath == null) throw new IllegalStateException("yt-dlp が利用できません");
         Path botRoot = Paths.get("").toAbsolutePath().normalize();
         Path cacheDir = botRoot.resolve("cache");
         Files.createDirectories(cacheDir);
 
         String url = toYoutubeUrl(input);
+        String videoId = tryExtractYoutubeId(url);
+        String key = videoId != null ? videoId : url;
+
+        Long failedUntil = recentFailures.get(key);
+        if (failedUntil != null) {
+            if (failedUntil > System.currentTimeMillis()) {
+                throw new IllegalStateException("直近に yt-dlp での取得に失敗した動画のため、再試行を見送ります: " + key);
+            }
+            recentFailures.remove(key, failedUntil);
+        }
+
+        Path cached = findCachedFile(cacheDir, videoId);
+        if (cached != null) {
+            logger.info("yt-dlp のキャッシュを再利用: {}", cached);
+            return cached;
+        }
+
+        CompletableFuture<Path> mine = new CompletableFuture<>();
+        CompletableFuture<Path> existing = inFlightDownloads.putIfAbsent(key, mine);
+        if (existing != null) {
+            logger.info("同じ動画のダウンロードが進行中のため完了を待ちます: {}", key);
+            try {
+                return existing.get(YTDLP_TIMEOUT_SEC * 2 + 30, TimeUnit.SECONDS);
+            } catch (ExecutionException e) {
+                Throwable cause = e.getCause();
+                throw cause instanceof Exception ? (Exception) cause : new RuntimeException(cause);
+            }
+        }
+        try {
+            Path out = runDownload(botRoot, cacheDir, url, key);
+            mine.complete(out);
+            return out;
+        } catch (Exception ex) {
+            mine.completeExceptionally(ex);
+            throw ex;
+        } finally {
+            inFlightDownloads.remove(key, mine);
+        }
+    }
+
+    /** 直近に yt-dlp 取得へ失敗した動画かどうか（フォールバック開始前の事前チェック用） */
+    boolean isRecentlyFailed(String input) {
+        String url = toYoutubeUrl(input);
+        String videoId = tryExtractYoutubeId(url);
+        Long failedUntil = recentFailures.get(videoId != null ? videoId : url);
+        return failedUntil != null && failedUntil > System.currentTimeMillis();
+    }
+
+    private void markFailure(String key, boolean permanent) {
+        long now = System.currentTimeMillis();
+        if (recentFailures.size() > 256) recentFailures.values().removeIf(until -> until <= now);
+        recentFailures.put(key, now + (permanent ? PERMANENT_FAILURE_TTL_MS : FAILURE_TTL_MS));
+    }
+
+    private static boolean isPermanentError(String outputTail) {
+        return outputTail != null && PERMANENT_ERROR.matcher(outputTail).find();
+    }
+
+    private Path findCachedFile(Path cacheDir, String videoId) {
+        if (videoId == null || videoId.isBlank()) return null;
+        for (String ext : CACHE_EXTENSIONS) {
+            Path candidate = cacheDir.resolve(videoId + "." + ext);
+            try {
+                if (Files.isRegularFile(candidate) && Files.size(candidate) > 0) return candidate;
+            } catch (IOException ignored) {
+                // 読めないファイルは無いものとして扱う
+            }
+        }
+        return null;
+    }
+
+    /** 読み込めなかったキャッシュファイルを削除する（次回は再ダウンロードさせる） */
+    void invalidateCache(Path file) {
+        if (file == null) return;
+        try {
+            if (Files.deleteIfExists(file)) logger.warn("読み込めないキャッシュを削除しました: {}", file);
+        } catch (IOException e) {
+            logger.warn("キャッシュの削除に失敗: {} ({})", file, e.toString());
+        }
+    }
+
+    private Path runDownload(Path botRoot, Path cacheDir, String url, String key) throws Exception {
         logger.info("yt-dlp でダウンロード: {}", url);
 
         List<String> cmd = new ArrayList<>();
@@ -324,6 +458,10 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 "--newline",
                 "--restrict-filenames",
                 "--force-overwrites",
+                // 応答が止まった接続で長時間待たない
+                "--socket-timeout", "30",
+                "--retries", "5",
+                "--fragment-retries", "5",
                 "-f", "bestaudio[ext=webm][acodec=opus]/bestaudio[ext=m4a]/bestaudio",
                 "--no-post-overwrites",
                 "--output", cacheDir.resolve("%(id)s.%(ext)s").toString(),
@@ -347,7 +485,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 List.of("--force-ipv4"),
                 List.of("--extractor-args", "youtube:player_client=tv,ios,web")
         );
-        for (List<String> extra : retryExtras) {
+        for (int i = 0; i < retryExtras.size(); i++) {
+            List<String> extra = retryExtras.get(i);
             List<String> attempt = new ArrayList<>(cmd.size() + extra.size());
             attempt.addAll(cmd.subList(0, cmd.size() - 1));
             attempt.addAll(extra);
@@ -355,12 +494,26 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
             result = runYtDlp(botRoot, attempt);
             if (result.exitCode == 0) break;
+            if (result.timedOut) {
+                logger.warn("yt-dlp がタイムアウト ({}秒, extra={}): {}", YTDLP_TIMEOUT_SEC, extra, result.outputTail);
+                // IPv6 起因の停滞に備えて IPv4 強制で 1 回だけ再試行。それでも駄目なら諦める
+                if (i >= 1) break;
+                continue;
+            }
             logger.warn("yt-dlp失敗 (exit={}, extra={}): {}", result.exitCode, extra, result.outputTail);
+            if (isPermanentError(result.outputTail)) {
+                logger.warn("再試行しても解決しないエラーのため中止: {}", key);
+                break;
+            }
         }
 
         if (result == null) throw new RuntimeException("yt-dlp実行に失敗: 実行結果なし");
-        if (result.timedOut) throw new RuntimeException("yt-dlp timeout (600s)");
+        if (result.timedOut) {
+            markFailure(key, false);
+            throw new RuntimeException("yt-dlp timeout (" + YTDLP_TIMEOUT_SEC + "s)");
+        }
         if (result.exitCode != 0) {
+            markFailure(key, isPermanentError(result.outputTail));
             String msg = result.outputTail.isBlank() ? "" : " / output tail: " + result.outputTail;
             throw new RuntimeException("yt-dlp exit code=" + result.exitCode + msg);
         }
@@ -368,49 +521,91 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         String lastNonEmpty = result.lastNonEmptyLine;
         if (lastNonEmpty == null) {
             String id = tryExtractYoutubeId(url);
-            if (id == null) throw new IllegalStateException("最終パス不明（printが空）。ID抽出も失敗");
-            // 既知拡張子を探索
-            Path guessWebm = cacheDir.resolve(id + ".webm");
-            if (Files.isRegularFile(guessWebm)) return guessWebm;
-            Path guessM4a = cacheDir.resolve(id + ".m4a");
-            if (Files.isRegularFile(guessM4a)) return guessM4a;
-            throw new FileNotFoundException("出力不明");
+            Path guess = findCachedFile(cacheDir, id);
+            if (guess != null) return guess;
+            markFailure(key, false);
+            throw new FileNotFoundException("最終パス不明（printが空）。キャッシュからも見つかりません: " + id);
         }
 
         Path out = Paths.get(lastNonEmpty);
         if (!out.isAbsolute()) out = botRoot.resolve(out).normalize();
-        if (!Files.isRegularFile(out)) throw new FileNotFoundException("出力が存在しません: " + out);
+        if (!Files.isRegularFile(out)) {
+            markFailure(key, false);
+            throw new FileNotFoundException("出力が存在しません: " + out);
+        }
         logger.info("yt-dlp 完了: {}", out);
         return out;
     }
 
+    /**
+     * yt-dlp を 1 回実行する。標準出力は別スレッドで読み取り、
+     * プロセスが出力を止めたまま固まっても {@link #YTDLP_TIMEOUT_SEC} で確実に打ち切る。
+     */
     private YtDlpRunResult runYtDlp(Path botRoot, List<String> cmd) throws Exception {
-        ProcessBuilder pb = new ProcessBuilder(cmd);
-        pb.directory(botRoot.toFile());
-        pb.redirectErrorStream(true);
-        // 日本語パス対応：Python(yt-dlp)の出力を UTF-8 に固定
-        pb.environment().put("PYTHONIOENCODING", "utf-8");
+        ytDlpSlots.acquire();
+        Process proc = null;
+        try {
+            ProcessBuilder pb = new ProcessBuilder(cmd);
+            pb.directory(botRoot.toFile());
+            pb.redirectErrorStream(true);
+            // 日本語パス対応：Python(yt-dlp)の出力を UTF-8 に固定
+            pb.environment().put("PYTHONIOENCODING", "utf-8");
 
-        Process proc = pb.start();
+            proc = pb.start();
+            OutputCollector collector = new OutputCollector(proc);
+            Thread reader = new Thread(collector, "yt-dlp-output");
+            reader.setDaemon(true);
+            reader.start();
 
-        String lastNonEmpty = null;
-        Deque<String> tail = new ArrayDeque<>();
-        try (BufferedReader r = new BufferedReader(new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = r.readLine()) != null) {
-                if (!line.isBlank()) lastNonEmpty = line.trim();
-                if (tail.size() >= 12) tail.removeFirst();
-                tail.addLast(line);
-                logger.debug("[yt-dlp] {}", line);
+            boolean finished = proc.waitFor(YTDLP_TIMEOUT_SEC, TimeUnit.SECONDS);
+            if (!finished) {
+                proc.destroyForcibly();
+                proc.waitFor(5, TimeUnit.SECONDS);
+            }
+            reader.join(5_000);
+            return new YtDlpRunResult(finished ? proc.exitValue() : -1, !finished,
+                    collector.lastNonEmpty(), collector.tail());
+        } finally {
+            if (proc != null && proc.isAlive()) proc.destroyForcibly(); // 割り込み時にプロセスを残さない
+            ytDlpSlots.release();
+        }
+    }
+
+    /** yt-dlp の出力を読み取り、最後の非空行と末尾数行を保持する */
+    private final class OutputCollector implements Runnable {
+        private final Process proc;
+        private String lastNonEmpty;
+        private final Deque<String> tail = new ArrayDeque<>();
+
+        OutputCollector(Process proc) {
+            this.proc = proc;
+        }
+
+        @Override
+        public void run() {
+            try (BufferedReader r = new BufferedReader(
+                    new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = r.readLine()) != null) {
+                    synchronized (this) {
+                        if (!line.isBlank()) lastNonEmpty = line.trim();
+                        if (tail.size() >= 12) tail.removeFirst();
+                        tail.addLast(line);
+                    }
+                    logger.debug("[yt-dlp] {}", line);
+                }
+            } catch (IOException e) {
+                logger.debug("yt-dlp の出力読み取りを終了: {}", e.toString());
             }
         }
 
-        boolean finished = proc.waitFor(600, TimeUnit.SECONDS);
-        if (!finished) {
-            proc.destroyForcibly();
-            return new YtDlpRunResult(-1, true, lastNonEmpty, String.join(" | ", tail));
+        synchronized String lastNonEmpty() {
+            return lastNonEmpty;
         }
-        return new YtDlpRunResult(proc.exitValue(), false, lastNonEmpty, String.join(" | ", tail));
+
+        synchronized String tail() {
+            return String.join(" | ", tail);
+        }
     }
 
     private static final class YtDlpRunResult {
@@ -425,6 +620,11 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             this.lastNonEmptyLine = lastNonEmptyLine;
             this.outputTail = outputTail == null ? "" : outputTail;
         }
+    }
+
+    /** Bot 終了時に呼ぶ。進行中のフォールバックを中断する */
+    public void shutdown() {
+        fallbackExecutor.shutdownNow();
     }
 
     private String toYoutubeUrl(String input) {
@@ -474,96 +674,25 @@ public class PlayerManager extends DefaultAudioPlayerManager {
     }
 
     // ==========================================================
-    // 再生中例外 → yt-dlp フォールバック
+    // 再生中例外 / スタック → yt-dlp フォールバック
     // ==========================================================
     private static class YtDlpExceptionListener extends AudioEventAdapter {
+        /** 差し替え時に再開位置を引き継ぐ際、先頭・末尾からこの範囲内なら引き継がない */
+        private static final long RESUME_MARGIN_MS = 3_000;
+
         private final PlayerManager pm;
-        private final AudioPlayer player;
         private final AudioHandler handler;
-        private final AtomicBoolean fallingBack = new AtomicBoolean(false);
-        private final Set<String> attempted = Collections.synchronizedSet(new HashSet<>());
 
-        YtDlpExceptionListener(PlayerManager pm, AudioPlayer player, AudioHandler handler) {
+        YtDlpExceptionListener(PlayerManager pm, AudioHandler handler) {
             this.pm = pm;
-            this.player = player;
             this.handler = handler;
-        }
-
-        /**
-         * 再生もフォールバックもできなかったトラックを諦めて、次の曲へ進める。
-         * <p>
-         * この時点では {@code suppressAutoLeaveOnce} により通常の onTrackEnd が抑制されているため、
-         * 明示的にキューを進めないと再生が止まったままになる。
-         */
-        private void skipFailedTrack(AudioTrack track, String reason) {
-            try {
-                handler.notifyTrackFailed(track, reason);
-            } finally {
-                handler.playNextOrStop();
-            }
         }
 
         @Override
         public void onTrackException(AudioPlayer player, AudioTrack track, FriendlyException exception) {
             String id = track != null ? track.getIdentifier() : null;
             pm.logger.warn("再生中に例外発生。id={} msg={}", id, exception.getMessage());
-
-            if (!pm.shouldFallbackToYtDlp(track)) {
-                // フォールバックできないので、通常の onTrackEnd に任せて次の曲へ進む
-                handler.notifyTrackFailed(track, exception.getMessage());
-                return;
-            }
-
-            if (!attempted.add(id)) {
-                pm.logger.debug("このトラックは既にフォールバックを試行済み: {}", id);
-                handler.notifyTrackFailed(track, exception.getMessage());
-                return;
-            }
-            if (!fallingBack.compareAndSet(false, true)) return;
-
-            // フォールバックを実際に開始する場合のみ、次に来る onTrackEnd を一度だけ抑制（退出防止）。
-            // ここより前で return すると抑制が残り、キューが進まなくなる。
-            handler.suppressAutoLeaveOnce();
-
-            CompletableFuture.runAsync(() -> {
-                try {
-                    Path out = pm.downloadViaYtDlp(id);
-                    if (out == null || !Files.isRegularFile(out))
-                        throw new IllegalStateException("yt-dlp出力が見つからない: " + out);
-
-                    pm.logger.info("yt-dlpフォールバック成功。ローカルへ差し替え再生: {}", out);
-
-                    pm.loadItemOrdered(handler, out.toAbsolutePath().toString(), new AudioLoadResultHandler() {
-                        @Override public void trackLoaded(AudioTrack newTrack) {
-                            // メタ引き継ぎ
-                            pm.applyReplacementContext(newTrack, track);
-                            // stopTrack() は呼ばず置き換え再生（REPLACED）
-                            player.startTrack(newTrack, false);
-                        }
-                        @Override public void playlistLoaded(AudioPlaylist playlist) {
-                            AudioTrack t = playlist.getTracks().isEmpty() ? null : playlist.getTracks().get(0);
-                            if (t != null) {
-                                pm.applyReplacementContext(t, track);
-                                player.startTrack(t, false);
-                            } else noMatches();
-                        }
-                        @Override public void noMatches() {
-                            pm.logger.error("ローカル差し替えのロードに失敗（noMatches）: {}", out);
-                            skipFailedTrack(track, "ダウンロードしたファイルを読み込めませんでした。");
-                        }
-                        @Override public void loadFailed(FriendlyException e) {
-                            pm.logger.error("ローカル差し替えのロードに失敗: {}", e.getMessage());
-                            skipFailedTrack(track, e.getMessage());
-                        }
-                    });
-                } catch (Exception ex) {
-                    pm.logger.error("yt-dlpフォールバック（再生中）に失敗: {}", ex.toString());
-                    // フォールバックも失敗したので、そのトラックは諦めて次の曲へ進む
-                    skipFailedTrack(track, exception.getMessage());
-                } finally {
-                    fallingBack.set(false);
-                }
-            });
+            startFallback(player, track, exception.getMessage(), AudioHandler.FallbackOrigin.EXCEPTION);
         }
 
         @Override
@@ -577,8 +706,98 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 return;
             }
             pm.logger.warn("トラックがスタック。yt-dlpへフォールバックを試行: id={}, stuck={}ms", id, thresholdMs);
-            onTrackException(player, track, new FriendlyException("stuck " + thresholdMs + "ms",
-                    FriendlyException.Severity.SUSPICIOUS, null));
+            startFallback(player, track, "再生が " + (thresholdMs / 1000) + " 秒以上停止しました。",
+                    AudioHandler.FallbackOrigin.STUCK);
+        }
+
+        private void startFallback(AudioPlayer player, AudioTrack track, String reason,
+                                   AudioHandler.FallbackOrigin origin) {
+            boolean fromException = origin == AudioHandler.FallbackOrigin.EXCEPTION;
+            if (!pm.shouldFallbackToYtDlp(track)) {
+                // フォールバックできないので、通常の onTrackEnd に任せて次の曲へ進む
+                if (fromException) handler.notifyTrackFailed(track, reason);
+                return;
+            }
+            String id = track.getIdentifier();
+            if (pm.isRecentlyFailed(id)) {
+                pm.logger.info("直近に yt-dlp 取得へ失敗した動画のためフォールバックを見送り: {}", id);
+                handler.notifyTrackFailed(track, reason);
+                // スタック中のトラックは自然には終わらないので、ここで打ち切って次へ進める
+                if (!fromException && player.getPlayingTrack() == track) player.stopTrack();
+                return;
+            }
+            switch (handler.beginFallback(track, origin)) {
+                case ALREADY_PENDING:
+                    pm.logger.debug("このトラックは既にフォールバック中: {}", id);
+                    return;
+                case BUSY:
+                    pm.logger.info("別トラックのフォールバックが進行中のため見送り: {}", id);
+                    if (fromException) handler.notifyTrackFailed(track, reason);
+                    return;
+                case STARTED:
+                    break;
+            }
+            try {
+                pm.fallbackExecutor.execute(() -> runFallback(track, reason));
+            } catch (RejectedExecutionException e) {
+                // シャットダウン中。抑制した終了処理を取り消して通常どおり進める
+                handler.failFallback(track, reason);
+            }
+        }
+
+        private void runFallback(AudioTrack track, String reason) {
+            Path out;
+            try {
+                out = pm.downloadViaYtDlp(track.getIdentifier());
+                if (out == null || !Files.isRegularFile(out))
+                    throw new IllegalStateException("yt-dlp出力が見つからない: " + out);
+            } catch (Exception ex) {
+                pm.logger.error("yt-dlpフォールバック（再生中）に失敗: {}", ex.toString());
+                handler.failFallback(track, reason);
+                return;
+            }
+
+            pm.logger.info("yt-dlpフォールバック成功。ローカルへ差し替え再生: {}", out);
+            Path file = out;
+            // ローカルファイルのロードは順序保証が不要なので、ギルドの通常ロード列に並ばせない
+            pm.loadItem(file.toAbsolutePath().toString(), new AudioLoadResultHandler() {
+                @Override public void trackLoaded(AudioTrack newTrack) {
+                    replace(track, newTrack);
+                }
+                @Override public void playlistLoaded(AudioPlaylist playlist) {
+                    AudioTrack t = playlist.getTracks().isEmpty() ? null : playlist.getTracks().get(0);
+                    if (t != null) replace(track, t);
+                    else noMatches();
+                }
+                @Override public void noMatches() {
+                    pm.logger.error("ローカル差し替えのロードに失敗（noMatches）: {}", file);
+                    pm.invalidateCache(file);
+                    handler.failFallback(track, "ダウンロードしたファイルを読み込めませんでした。");
+                }
+                @Override public void loadFailed(FriendlyException e) {
+                    pm.logger.error("ローカル差し替えのロードに失敗: {}", e.getMessage());
+                    pm.invalidateCache(file);
+                    handler.failFallback(track, e.getMessage());
+                }
+            });
+        }
+
+        private void replace(AudioTrack failed, AudioTrack replacement) {
+            // メタ引き継ぎ
+            pm.applyReplacementContext(replacement, failed);
+
+            // 途中で止まった場合は、聞こえていた位置から再開する
+            long position = failed.getPosition();
+            long duration = replacement.getDuration();
+            if (replacement.isSeekable() && position > RESUME_MARGIN_MS
+                    && duration != Units.DURATION_MS_UNKNOWN && position < duration - RESUME_MARGIN_MS) {
+                replacement.setPosition(position);
+                pm.logger.info("差し替えトラックを {}ms から再開: {}", position, failed.getIdentifier());
+            }
+
+            if (!handler.completeFallback(failed, replacement)) {
+                pm.logger.info("フォールバック完了前に再生が停止/変更されたため、差し替えを破棄: {}", failed.getIdentifier());
+            }
         }
     }
 }

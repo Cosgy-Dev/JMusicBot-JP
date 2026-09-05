@@ -171,6 +171,7 @@ public class Bot {
             return;
         shuttingDown = true;
         threadpool.shutdownNow();
+        players.shutdown();
         if (jda.getStatus() != JDA.Status.SHUTTING_DOWN) {
             jda.getGuilds().forEach(g ->
             {
