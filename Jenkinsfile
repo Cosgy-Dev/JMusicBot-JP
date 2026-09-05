@@ -9,6 +9,8 @@ pipeline {
 
     environment {
         MAVEN_OPTS = '-Xmx3200m'
+        // Discord Webhook URL を保存した認証情報(Secret text)のID
+        DISCORD_WEBHOOK_CREDENTIAL_ID = 'discord-webhook'
     }
 
     stages {
@@ -106,6 +108,36 @@ pipeline {
         always {
             junit testResults: 'target/surefire-reports/*.xml', allowEmptyResults: true
             archiveArtifacts artifacts: 'target/*.jar', fingerprint: true, onlyIfSuccessful: true
+            // junit がビルドを UNSTABLE にする場合があるため、通知は最後に行う
+            script {
+                notifyDiscord()
+            }
         }
+    }
+}
+
+
+void notifyDiscord() {
+    try {
+        withCredentials([string(credentialsId: env.DISCORD_WEBHOOK_CREDENTIAL_ID, variable: 'DISCORD_WEBHOOK')]) {
+            // post ブロックでは "and counting" が付くため取り除く
+            String duration = currentBuild.durationString.replace(' and counting', '')
+            String branch = env.BRANCH_NAME ?: env.GIT_BRANCH ?: '-'
+
+            discordSend(
+                webhookURL: env.DISCORD_WEBHOOK,
+                // result は SUCCESS / UNSTABLE / FAILURE / ABORTED を受け取り、埋め込みの色が変わる
+                result: currentBuild.currentResult,
+                title: "${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                link: env.BUILD_URL,
+                description: "**${currentBuild.currentResult}** (所要時間: ${duration})",
+                footer: "ブランチ: ${branch}",
+                enableArtifactsList: true,
+                showChangeset: true
+            )
+        }
+    } catch (Exception e) {
+        // 通知の失敗でビルドを落とさない
+        echo "Discord への通知をスキップしました: ${e.message}"
     }
 }
