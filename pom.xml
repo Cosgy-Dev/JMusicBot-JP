@@ -15,6 +15,17 @@
             <url>https://maven.lavalink.dev/releases</url>
         </repository>
         <repository>
+            <id>lavalinkSnapshots</id>
+            <name>Lavalink Snapshot Repository</name>
+            <url>https://maven.lavalink.dev/snapshots</url>
+            <releases>
+                <enabled>false</enabled>
+            </releases>
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+        </repository>
+        <repository>
             <id>jitpack.io</id>
             <url>https://jitpack.io</url>
         </repository>
@@ -78,7 +89,7 @@
         <dependency>
             <groupId>dev.lavalink.youtube</groupId>
             <artifactId>v2</artifactId>
-            <version>1.18.2</version>
+            <version>f45bbb7aebfcbc1c553769e04af6cd43afa8b7c3-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.github.Cosgy-Dev</groupId>
