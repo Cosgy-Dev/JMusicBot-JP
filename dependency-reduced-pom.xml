@@ -83,6 +83,15 @@
       <url>https://maven.lavalink.dev/releases</url>
     </repository>
     <repository>
+      <releases>
+        <enabled>false</enabled>
+      </releases>
+      <snapshots />
+      <id>lavalinkSnapshots</id>
+      <name>Lavalink Snapshot Repository</name>
+      <url>https://maven.lavalink.dev/snapshots</url>
+    </repository>
+    <repository>
       <id>jitpack.io</id>
       <url>https://jitpack.io</url>
     </repository>

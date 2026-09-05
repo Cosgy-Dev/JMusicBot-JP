@@ -28,6 +28,12 @@ import com.sedmelluq.discord.lavaplayer.track.*;
 import dev.cosgy.jmusicbot.util.YtDlpManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.YoutubeSourceOptions;
+import dev.lavalink.youtube.clients.AndroidVr;
+import dev.lavalink.youtube.clients.Music;
+import dev.lavalink.youtube.clients.Tv;
+import dev.lavalink.youtube.clients.Web;
+import dev.lavalink.youtube.clients.WebEmbedded;
+import dev.lavalink.youtube.clients.skeleton.Client;
 import dev.lavalink.youtube.clients.*;
 import net.dv8tion.jda.api.entities.Guild;
 import org.slf4j.Logger;
@@ -127,7 +133,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         }
 
         YoutubeAudioSourceManager yt = new YoutubeAudioSourceManager(
-                buildYoutubeSourceOptions(), YoutubeAudioSourceManager.DEFAULT_CLIENTS);
+                buildYoutubeSourceOptions(), buildYoutubeClients());
         yt.setPlaylistPageCount(10);
         if (bot.getConfig().isYouTubeOauth2Enabled()) {
             String refreshToken = bot.getConfig().getYouTubeOauth2RefreshToken();
@@ -254,6 +260,25 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             handler = (AudioHandler) guild.getAudioManager().getSendingHandler();
         }
         return handler;
+    }
+
+    /**
+     * Builds the YouTube client list.
+     *
+     * <p>The TV client is added to the defaults ({@code MUSIC, ANDROID_VR, WEB, WEB_EMBEDDED}).
+     * YouTube began rejecting Cobalt-family User-Agents on the TVHTML5 player endpoint around
+     * 2026-08-18, responding UNPLAYABLE / "The page needs to be reloaded." regardless of
+     * clientVersion, signatureTimestamp or params. youtube-source now sends a PlayStation 4
+     * identity, which is still accepted, so the TV client is usable again.
+     *
+     * <p>{@code Tv#canHandleRequest} always returns false, so this client never resolves
+     * searches or URLs; it only takes part in playback. It is placed ahead of the other
+     * playback clients because they currently fail with login requirements or missing formats.
+     *
+     * @see <a href="https://github.com/lavalink-devs/youtube-source/issues/233">youtube-source#233</a>
+     */
+    private Client[] buildYoutubeClients() {
+        return new Client[]{new Music(), new Tv(), new AndroidVr(), new Web(), new WebEmbedded()};
     }
 
     /**

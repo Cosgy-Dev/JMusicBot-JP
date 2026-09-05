@@ -89,7 +89,7 @@
         <dependency>
             <groupId>dev.lavalink.youtube</groupId>
             <artifactId>v2</artifactId>
-            <version>f45bbb7aebfcbc1c553769e04af6cd43afa8b7c3-SNAPSHOT</version>
+            <version>b33460b38ad13b5cd07da75e46444397cf0ea2df-SNAPSHOT</version>
         </dependency>
         <dependency>
             <groupId>com.github.Cosgy-Dev</groupId>
