@@ -21,7 +21,6 @@ import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler;
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer;
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager;
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter;
-import com.sedmelluq.discord.lavaplayer.source.AudioSourceManager;
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.Units;
@@ -46,7 +45,6 @@ import java.util.regex.Pattern;
 
 public class PlayerManager extends DefaultAudioPlayerManager {
     /** yt-dlp フォールバックの対象となる提供元名 */
-    private static final String YOUTUBE_SOURCE_NAME = "youtube";
     /** ニコニコ動画の動画ID（sm/nm/so + 数字） */
     private static final Pattern NICO_ID_PATTERN = Pattern.compile("^(?:sm|nm|so)[0-9]+$");
 
@@ -107,7 +105,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 logger.info("yt-dlp version detected: {}", ytDlpVersion);
             }
         } catch (Exception e) {
-            logger.error("yt-dlp の初期化に失敗。YouTubeフォールバックは無効化されます。", e);
+            logger.error("yt-dlp の初期化に失敗。yt-dlpフォールバックは無効化されます。", e);
             this.ytDlpPath = null;
             this.ytDlpVersion = null;
         }
@@ -281,40 +279,58 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         });
     }
 
-    /**
-     * yt-dlp による YouTube フォールバックの対象トラックかどうかを判定する。
-     * <p>
-     * 識別子だけでは、ニコニコ動画の ID（例: so29416460）が YouTube の動画 ID と区別できず、
-     * 誤って {@code https://www.youtube.com/watch?v=so29416460} を取得しにいってしまう。
-     * トラックが分かっている場合は、必ず提供元も併せて確認する。
-     */
-    boolean shouldFallbackToYtDlp(AudioTrack track) {
-        if (track == null) return false;
-        AudioSourceManager sourceManager = track.getSourceManager();
-        if (sourceManager != null && !YOUTUBE_SOURCE_NAME.equals(sourceManager.getSourceName())) {
-            return false;
-        }
-        // ライブ配信は yt-dlp でダウンロードしても終わらない（タイムアウトまで待たせるだけ）
-        if (track.getInfo() != null && track.getInfo().isStream) return false;
-        return shouldFallbackToYtDlp(track.getIdentifier());
+    /** 文字列が http(s) の URL かどうか。 */
+    private static boolean isHttpUrl(String value) {
+        if (value == null) return false;
+        String lower = value.trim().toLowerCase(Locale.ROOT);
+        return lower.startsWith("http://") || lower.startsWith("https://");
     }
 
+    /**
+     * yt-dlp に渡す URL を求める。トラックの URI をそのまま使うので、提供元を問わず
+     * yt-dlp が対応しているサイトであればフォールバックできる。
+     * <p>
+     * 識別子（{@link AudioTrack#getIdentifier()}）は使わない。ニコニコ動画の ID
+     * （例: so29416460）は YouTube の動画 ID と区別できず、誤って
+     * {@code https://www.youtube.com/watch?v=so29416460} を取得しにいってしまうため。
+     *
+     * @return 渡せる URL。無ければ {@code null}
+     */
+    String downloadUrlOf(AudioTrack track) {
+        if (track == null) return null;
+        AudioTrackInfo info = track.getInfo();
+        String uri = info == null ? null : info.uri;
+        return isHttpUrl(uri) ? uri.trim() : null;
+    }
+
+    /**
+     * yt-dlp フォールバックの対象トラックかどうかを判定する。
+     */
+    boolean shouldFallbackToYtDlp(AudioTrack track) {
+        if (track == null || ytDlpPath == null) return false;
+        // ライブ配信は yt-dlp でダウンロードしても終わらない（タイムアウトまで待たせるだけ）
+        if (track.getInfo() != null && track.getInfo().isStream) return false;
+        return downloadUrlOf(track) != null;
+    }
+
+    /**
+     * ロード段階での判定。トラックがまだ無いため、利用者が入力した文字列だけで判断する。
+     */
     boolean shouldFallbackToYtDlp(String identifier) {
         if (ytDlpPath == null || identifier == null) return false;
-        String id = identifier.toLowerCase(Locale.ROOT);
-        if (id.startsWith("ytsearch:")) return false;
-        if (id.startsWith("http://") || id.startsWith("https://")) {
-            return id.contains("youtube.com/") || id.contains("youtu.be/");
-        }
-        if (NICO_ID_PATTERN.matcher(id).matches()) return false; // ニコニコ動画のID
-        return id.matches("^[a-zA-Z0-9_-]{10,}$"); // 素のID
+        String id = identifier.trim();
+        if (id.toLowerCase(Locale.ROOT).startsWith("ytsearch:")) return false;
+        // URL であれば提供元を問わず yt-dlp に任せる
+        if (isHttpUrl(id)) return true;
+        if (NICO_ID_PATTERN.matcher(id.toLowerCase(Locale.ROOT)).matches()) return false; // ニコニコ動画のID
+        return id.matches("^[a-zA-Z0-9_-]{10,}$"); // 素のYouTube ID
     }
 
     private void tryFallbackDownload(Object orderingKey,
                                      String identifier,
                                      AudioLoadResultHandler handler,
                                      FriendlyException cause) {
-        logger.warn("YouTubeのロードに失敗。yt-dlpでフォールバックします: {}", identifier);
+        logger.warn("ロードに失敗。yt-dlpでフォールバックします: {}", identifier);
         try {
             Path out = downloadViaYtDlp(identifier);
             if (out == null || !Files.isRegularFile(out))
@@ -342,7 +358,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                         FriendlyException.Severity.SUSPICIOUS, cause));
             } else {
                 handler.loadFailed(new FriendlyException(
-                        "YouTube未マッチ。yt-dlpフォールバックも失敗: " + ex.getMessage(),
+                        "読み込めず、yt-dlpフォールバックも失敗: " + ex.getMessage(),
                         FriendlyException.Severity.SUSPICIOUS, ex));
             }
         }
@@ -358,13 +374,13 @@ public class PlayerManager extends DefaultAudioPlayerManager {
      */
     Path downloadViaYtDlp(String input) throws Exception {
         if (ytDlpPath == null) throw new IllegalStateException("yt-dlp が利用できません");
+        if (input == null || input.isBlank()) throw new IllegalArgumentException("yt-dlp に渡す URL がありません");
         Path botRoot = Paths.get("").toAbsolutePath().normalize();
         Path cacheDir = botRoot.resolve("cache");
         Files.createDirectories(cacheDir);
 
         String url = toYoutubeUrl(input);
-        String videoId = tryExtractYoutubeId(url);
-        String key = videoId != null ? videoId : url;
+        String key = cacheKeyFor(url);
 
         Long failedUntil = recentFailures.get(key);
         if (failedUntil != null) {
@@ -374,7 +390,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             recentFailures.remove(key, failedUntil);
         }
 
-        Path cached = findCachedFile(cacheDir, videoId);
+        Path cached = findCachedFile(cacheDir, key);
         if (cached != null) {
             logger.info("yt-dlp のキャッシュを再利用: {}", cached);
             return cached;
@@ -405,9 +421,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
     /** 直近に yt-dlp 取得へ失敗した動画かどうか（フォールバック開始前の事前チェック用） */
     boolean isRecentlyFailed(String input) {
-        String url = toYoutubeUrl(input);
-        String videoId = tryExtractYoutubeId(url);
-        Long failedUntil = recentFailures.get(videoId != null ? videoId : url);
+        if (input == null) return false;
+        Long failedUntil = recentFailures.get(cacheKeyFor(toYoutubeUrl(input)));
         return failedUntil != null && failedUntil > System.currentTimeMillis();
     }
 
@@ -464,27 +479,33 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 "--fragment-retries", "5",
                 "-f", "bestaudio[ext=webm][acodec=opus]/bestaudio[ext=m4a]/bestaudio",
                 "--no-post-overwrites",
-                "--output", cacheDir.resolve("%(id)s.%(ext)s").toString(),
+                "--output", cacheDir.resolve(key + ".%(ext)s").toString(),
                 "--print", "after_move:filepath"
         );
 
-        String ytEmail = bot.getConfig().getYouTubeEmailAddress();
-        String ytPass = bot.getConfig().getYouTubePassword();
-        if (ytEmail != null && !ytEmail.isBlank() && ytPass != null && !ytPass.isBlank()) {
-            cmd.add("--username");
-            cmd.add(ytEmail);
-            cmd.add("--password");
-            cmd.add(ytPass);
+        // YouTube の認証情報は YouTube にしか渡さない（他サイトへ送信してしまわないように）
+        if (isYoutubeUrl(url)) {
+            String ytEmail = bot.getConfig().getYouTubeEmailAddress();
+            String ytPass = bot.getConfig().getYouTubePassword();
+            if (ytEmail != null && !ytEmail.isBlank() && ytPass != null && !ytPass.isBlank()) {
+                cmd.add("--username");
+                cmd.add(ytEmail);
+                cmd.add("--password");
+                cmd.add(ytPass);
+            }
         }
 
         cmd.add(url);
 
         YtDlpRunResult result = null;
-        List<List<String>> retryExtras = List.of(
-                Collections.emptyList(),
-                List.of("--force-ipv4"),
-                List.of("--extractor-args", "youtube:player_client=tv,ios,web")
-        );
+        List<List<String>> retryExtras = isYoutubeUrl(url)
+                ? List.of(
+                        Collections.emptyList(),
+                        List.of("--force-ipv4"),
+                        List.of("--extractor-args", "youtube:player_client=tv,ios,web"))
+                : List.of(
+                        Collections.emptyList(),
+                        List.of("--force-ipv4"));
         for (int i = 0; i < retryExtras.size(); i++) {
             List<String> extra = retryExtras.get(i);
             List<String> attempt = new ArrayList<>(cmd.size() + extra.size());
@@ -520,11 +541,10 @@ public class PlayerManager extends DefaultAudioPlayerManager {
 
         String lastNonEmpty = result.lastNonEmptyLine;
         if (lastNonEmpty == null) {
-            String id = tryExtractYoutubeId(url);
-            Path guess = findCachedFile(cacheDir, id);
+            Path guess = findCachedFile(cacheDir, key);
             if (guess != null) return guess;
             markFailure(key, false);
-            throw new FileNotFoundException("最終パス不明（printが空）。キャッシュからも見つかりません: " + id);
+            throw new FileNotFoundException("最終パス不明（printが空）。キャッシュからも見つかりません: " + key);
         }
 
         Path out = Paths.get(lastNonEmpty);
@@ -627,10 +647,30 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         fallbackExecutor.shutdownNow();
     }
 
+    /** YouTube の URL かどうか。YouTube 専用の引数を出し分けるために使う。 */
+    private static boolean isYoutubeUrl(String url) {
+        if (url == null) return false;
+        String lower = url.toLowerCase(Locale.ROOT);
+        return lower.contains("youtube.com/") || lower.contains("youtu.be/");
+    }
+
+    /** URL でなければ素の YouTube ID とみなして URL 化する。 */
     private String toYoutubeUrl(String input) {
         String s = input == null ? "" : input.trim();
-        if (s.startsWith("http://") || s.startsWith("https://")) return s;
+        if (isHttpUrl(s)) return s;
         return "https://www.youtube.com/watch?v=" + s;
+    }
+
+    /**
+     * キャッシュファイル名と失敗記録に使うキー。
+     * YouTube は従来どおり動画IDを使い、既存のキャッシュをそのまま活かす。
+     * それ以外は URL から一意な名前を作る（yt-dlp の {@code %(id)s} は事前に分からないため）。
+     */
+    private String cacheKeyFor(String url) {
+        String videoId = tryExtractYoutubeId(url);
+        if (videoId != null && !videoId.isBlank()) return videoId;
+        return "dl_" + UUID.nameUUIDFromBytes(url.getBytes(StandardCharsets.UTF_8))
+                .toString().replace("-", "");
     }
 
     private String tryExtractYoutubeId(String url) {
@@ -718,7 +758,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 if (fromException) handler.notifyTrackFailed(track, reason);
                 return;
             }
-            String id = track.getIdentifier();
+            String id = pm.downloadUrlOf(track);
             if (pm.isRecentlyFailed(id)) {
                 pm.logger.info("直近に yt-dlp 取得へ失敗した動画のためフォールバックを見送り: {}", id);
                 handler.notifyTrackFailed(track, reason);
@@ -748,7 +788,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         private void runFallback(AudioTrack track, String reason) {
             Path out;
             try {
-                out = pm.downloadViaYtDlp(track.getIdentifier());
+                out = pm.downloadViaYtDlp(pm.downloadUrlOf(track));
                 if (out == null || !Files.isRegularFile(out))
                     throw new IllegalStateException("yt-dlp出力が見つからない: " + out);
             } catch (Exception ex) {
@@ -795,8 +835,17 @@ public class PlayerManager extends DefaultAudioPlayerManager {
                 pm.logger.info("差し替えトラックを {}ms から再開: {}", position, failed.getIdentifier());
             }
 
-            if (!handler.completeFallback(failed, replacement)) {
-                pm.logger.info("フォールバック完了前に再生が停止/変更されたため、差し替えを破棄: {}", failed.getIdentifier());
+            String id = failed.getIdentifier();
+            switch (handler.completeFallback(failed, replacement)) {
+                case REPLACED, QUEUED, STARTED -> {
+                    // 差し替え成功
+                }
+                case DISCARDED_CANCELLED ->
+                        pm.logger.info("再生が停止/スキップされたため、差し替えを破棄: {}", id);
+                case DISCARDED_RECOVERED ->
+                        pm.logger.info("対象トラックが自力で再生を終えたため、差し替えを破棄: {}", id);
+                case DISCARDED_DISCONNECTED ->
+                        pm.logger.warn("ボイスチャンネルから退出済みのため、差し替えを破棄: {}", id);
             }
         }
     }

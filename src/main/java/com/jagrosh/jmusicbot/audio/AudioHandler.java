@@ -36,6 +36,7 @@ import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.audio.AudioSendHandler;
 import net.dv8tion.jda.api.entities.Guild;
+import net.dv8tion.jda.api.entities.GuildVoiceState;
 import net.dv8tion.jda.api.entities.User;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
@@ -48,6 +49,9 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -86,6 +90,22 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         BUSY
     }
 
+    /** {@link #completeFallback} の結果 */
+    public enum FallbackComplete {
+        /** 再生中のトラックをその場で差し替えた */
+        REPLACED,
+        /** 次に再生されるようキュー先頭へ入れた */
+        QUEUED,
+        /** 抑制していた終了処理の代わりに再生を開始した */
+        STARTED,
+        /** 停止・スキップ等で不要になった */
+        DISCARDED_CANCELLED,
+        /** スタックしていたトラックが自力で再生を終えたため不要になった */
+        DISCARDED_RECOVERED,
+        /** ボイスチャンネルから退出済みで再生できなかった */
+        DISCARDED_DISCONNECTED
+    }
+
     private enum FallbackPhase {
         /** ダウンロード中。終了イベントはまだ処理していない */
         PENDING,
@@ -115,6 +135,20 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
 
     /** 進行中のフォールバック（ギルドごとに同時に 1 つ） */
     private final AtomicReference<FallbackState> fallback = new AtomicReference<>();
+
+    /**
+     * トラックが終わってから実際に退出するまでの猶予。
+     * lavaplayer は終了イベントを例外イベントより先に配送することがあり、その僅かな間に
+     * 退出してしまうと、取得できた差し替えトラックを再生できなくなる。
+     * 提供元を問わず猶予を設けることで、この取りこぼしを防ぐ。
+     */
+    private static final long LEAVE_GRACE_MS = 2_000L;
+    /** 退出を保留したあと、再度判定するまでの間隔。 */
+    private static final long IDLE_LEAVE_RECHECK_MS = 1_000L;
+    /** この時刻まではフォールバックの登録待ちとして自動退出を保留する。 */
+    private volatile long leaveSuppressedUntil = 0L;
+    /** 退出の再判定を二重に予約しないためのフラグ。 */
+    private final AtomicBoolean idleLeaveScheduled = new AtomicBoolean(false);
 
     protected AudioHandler(PlayerManager manager, Guild guild, AudioPlayer player) {
         this.manager = manager;
@@ -155,11 +189,12 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     /**
      * フォールバックで取得した差し替えトラックを再生する。
      *
-     * @return 差し替え再生またはキュー投入した場合 true。停止・スキップ等で不要になり破棄した場合 false
+     * @return 差し替えをどう扱ったか。{@code DISCARDED_*} の場合は再生されていない
      */
-    public boolean completeFallback(AudioTrack failedTrack, AudioTrack replacement) {
+    public FallbackComplete completeFallback(AudioTrack failedTrack, AudioTrack replacement) {
         FallbackState state = fallback.get();
-        if (state == null || state.track != failedTrack) return false; // stop / skip 等で破棄済み
+        // stopAndClear（stop / skip / 一人残り退出）で破棄済み
+        if (state == null || state.track != failedTrack) return FallbackComplete.DISCARDED_CANCELLED;
         fallback.compareAndSet(state, null);
 
         boolean ended = !state.phase.compareAndSet(FallbackPhase.PENDING, FallbackPhase.RESOLVED);
@@ -168,27 +203,28 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         if (current == failedTrack) {
             // まだ再生中扱い（スタック中、またはバッファ残りを再生中）→ その場で差し替え（REPLACED）
             audioPlayer.startTrack(replacement, false);
-            return true;
+            return FallbackComplete.REPLACED;
         }
         if (state.origin == FallbackOrigin.STUCK) {
             // スタックしていたトラックは自力で終わった（または操作された）ので差し替え不要
-            return false;
+            return FallbackComplete.DISCARDED_RECOVERED;
         }
         if (current != null) {
             // 別のトラックが再生中（利用者の操作など）→ 次に再生されるようキュー先頭へ
             queue.addAt(0, new QueuedTrack(replacement, extractRequestMetadata(replacement)));
-            return true;
+            return FallbackComplete.QUEUED;
         }
         if (ended) {
             // 終了イベントを抑制して待たせていた → ここから再開する
             Guild guild = guild(manager.getBot().getJDA());
-            if (guild == null || !guild.getSelfMember().getVoiceState().inAudioChannel()) return false;
+            GuildVoiceState voiceState = guild == null ? null : guild.getSelfMember().getVoiceState();
+            if (voiceState == null || !voiceState.inAudioChannel()) return FallbackComplete.DISCARDED_DISCONNECTED;
             audioPlayer.playTrack(replacement);
-            return true;
+            return FallbackComplete.STARTED;
         }
         // 終了イベントを処理中 → 通常の進行がキュー先頭から拾う
         queue.addAt(0, new QueuedTrack(replacement, extractRequestMetadata(replacement)));
-        return true;
+        return FallbackComplete.QUEUED;
     }
 
     /**
@@ -264,6 +300,7 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         queue.clear();
         defaultQueue.clear();
         fallback.set(null); // 進行中のフォールバック結果は破棄する
+        leaveSuppressedUntil = 0L; // 明示的な停止なので退出を保留しない
         audioPlayer.stopTrack();
 
         Guild guild = guild(manager.getBot().getJDA());
@@ -328,6 +365,15 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
             return;
         }
 
+        // 例外イベントがこの終了イベントより後に届く場合に備え、フォールバックの登録を待つ。
+        // 再生開始後に失敗したトラックは LOAD_FAILED ではなく FINISHED で終わる
+        // （lavaplayer は failedBeforeLoad() で理由を分けている）ため、両方を対象にする。
+        // 提供元でも絞らない。利用者の操作による終了（STOPPED / REPLACED / CLEANUP）は
+        // mayStartNext が false なので、従来どおり即座に退出する。
+        if (endReason.mayStartNext) {
+            leaveSuppressedUntil = System.currentTimeMillis() + LEAVE_GRACE_MS;
+        }
+
         FallbackState state = fallback.get();
         if (state != null && state.track == track) {
             if (!endReason.mayStartNext) {
@@ -373,7 +419,7 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
         if (queue.isEmpty()) {
             if (!playFromDefault()) {
                 manager.getBot().getNowplayingHandler().onTrackUpdate(guildId, null, this);
-                if (!manager.getBot().getConfig().getStay()) manager.getBot().closeAudioConnection(guildId);
+                if (!manager.getBot().getConfig().getStay()) closeOrDeferAudioConnection();
 
                 audioPlayer.setPaused(false);
 
@@ -384,6 +430,44 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
             QueuedTrack qt = queue.pull();
             audioPlayer.playTrack(qt.getTrack());
         }
+    }
+
+    /**
+     * ボイスチャンネルから退出する。ただしフォールバックが進行中（または登録待ちの猶予内）であれば
+     * 退出せず、あとで再判定する。差し替えトラックの再生先を失わないための処置。
+     */
+    private void closeOrDeferAudioConnection() {
+        if (fallback.get() == null && System.currentTimeMillis() >= leaveSuppressedUntil) {
+            manager.getBot().closeAudioConnection(guildId);
+            return;
+        }
+        scheduleIdleLeave();
+    }
+
+    /** 少し待ってから退出可否を判定し直す。 */
+    private void scheduleIdleLeave() {
+        if (!idleLeaveScheduled.compareAndSet(false, true)) return;
+        try {
+            manager.getBot().getThreadpool()
+                    .schedule(this::leaveIfIdle, IDLE_LEAVE_RECHECK_MS, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            // シャットダウン中。退出処理は Bot#shutdown が行う
+            idleLeaveScheduled.set(false);
+        }
+    }
+
+    /** フォールバックが片付き、かつ何も再生していなければ退出する。 */
+    private void leaveIfIdle() {
+        idleLeaveScheduled.set(false);
+        if (manager.getBot().getConfig().getStay()) return;
+        // フォールバック進行中、または登録待ちの猶予内 → まだ退出しない
+        if (fallback.get() != null || System.currentTimeMillis() < leaveSuppressedUntil) {
+            scheduleIdleLeave();
+            return;
+        }
+        // 差し替え再生や新しいリクエストで再生が再開していれば退出しない
+        if (audioPlayer.getPlayingTrack() != null || !queue.isEmpty()) return;
+        manager.getBot().closeAudioConnection(guildId);
     }
 
     /**
@@ -415,6 +499,7 @@ public class AudioHandler extends AudioEventAdapter implements AudioSendHandler 
     @Override
     public void onTrackStart(AudioPlayer player, AudioTrack track) {
         votes.clear();
+        leaveSuppressedUntil = 0L;
         // 幻想郷ラジオの場合は、表示に使う曲情報の取得を先に開始させておく
         if (GensokyoInfoAgent.isGensokyoRadio(track)) {
             GensokyoInfoAgent.markActive();
