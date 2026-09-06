@@ -43,24 +43,24 @@ Javaがインストールされていない場合は、[こちら](https://www.o
 Dockerを使用してJavaのインストールなどを行わずにこのボットを自分で起動することができます。
 Dockerを使用する場合は、[こちら](https://hub.docker.com/r/cyberrex/jmusicbot-jp) を参照してください。
 
-# Jenkins CI (ci.cosgy.dev)
+同梱の `Dockerfile` から自分でイメージを作る場合は、`BUILD_TYPE` で取得するビルドを選べます。
 
-このリポジトリには `Jenkinsfile` が含まれています。  
-Jenkins の Pipeline ジョブでこのリポジトリを指定すると、以下を実行します。
+```bash
+# 最新リリース (GitHub Releases) — 既定
+docker build -t jmusicbot-jp .
 
-* `mvn --batch-mode --update-snapshots clean verify`
-* `target/*.jar` のアーカイブ公開
-* `PUBLISH_DIR` 環境変数が設定されている場合は、指定ディレクトリへ成果物をコピー
+# ベータ版 (Jenkins ci.cosgy.dev の develop 最終成功ビルド)
+docker build --build-arg BUILD_TYPE=beta -t jmusicbot-jp:beta .
+```
 
-成果物は Jenkins のビルド画面からダウンロードできます。
-
-# GitHub Actions のテストCI
-
-`.github/workflows/maven.yml` で、`develop`/`master` への push・pull request 時に単体テストを実行します。
-
-ローカルで同等のテストを実行する場合は以下を使用してください。
-
-* `./mvn --batch-mode --update-snapshots test`
+| ビルド引数 | 既定値 | 説明 |
+| --- | --- | --- |
+| `BUILD_TYPE` | `release` | `release` は GitHub のリリース、`beta` は Jenkins のビルドを取得する |
+| `RELEASE_TAG` | `latest` | `release` のときに取得するタグ。`latest` で最新リリース |
+| `BETA_BRANCH` | `develop` | `beta` のときに取得するブランチ (例: `master`, `hotfix/0.11.2`) |
+| `GITHUB_REPO` | `Cosgy-Dev/JMusicBot-JP` | 取得元のリポジトリ |
+| `JENKINS_URL` | `https://ci.cosgy.dev` | 取得元の Jenkins |
+| `JENKINS_JOB` | `JMusicBot-JP` | 取得元のマルチブランチジョブ名 |
 
 # 注意
 
