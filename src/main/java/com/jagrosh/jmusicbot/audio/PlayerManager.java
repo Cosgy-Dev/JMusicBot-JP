@@ -25,6 +25,7 @@ import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers;
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException;
 import com.sedmelluq.discord.lavaplayer.tools.Units;
 import com.sedmelluq.discord.lavaplayer.track.*;
+import dev.cosgy.agent.GensokyoInfoAgent;
 import dev.cosgy.jmusicbot.util.YtDlpManager;
 import dev.lavalink.youtube.YoutubeAudioSourceManager;
 import dev.lavalink.youtube.YoutubeSourceOptions;
@@ -363,6 +364,8 @@ public class PlayerManager extends DefaultAudioPlayerManager {
         if (ytDlpPath == null || identifier == null) return false;
         String id = identifier.trim();
         if (id.toLowerCase(Locale.ROOT).startsWith("ytsearch:")) return false;
+        // 常時配信のラジオは yt-dlp でダウンロードしても終わらない
+        if (id.toLowerCase(Locale.ROOT).contains(GensokyoInfoAgent.RADIO_HOST)) return false;
         // URL であれば提供元を問わず yt-dlp に任せる
         if (isHttpUrl(id)) return true;
         if (NICO_ID_PATTERN.matcher(id.toLowerCase(Locale.ROOT)).matches()) return false; // ニコニコ動画のID
@@ -397,7 +400,7 @@ public class PlayerManager extends DefaultAudioPlayerManager {
             logger.error("yt-dlpフォールバックに失敗: {}", ex.toString());
             if (cause != null) {
                 handler.loadFailed(new FriendlyException(
-                        "YouTubeロード失敗。yt-dlpフォールバックも失敗: " + ex.getMessage(),
+                        "ロードに失敗。yt-dlpフォールバックも失敗: " + ex.getMessage(),
                         FriendlyException.Severity.SUSPICIOUS, cause));
             } else {
                 handler.loadFailed(new FriendlyException(

@@ -36,7 +36,12 @@ import java.util.function.Consumer;
  * ストリームのURLを入力しなくても幻想郷ラジオを再生できるようにするコマンド。
  */
 public class GensokyoCmd extends MusicCommand {
-    /** 再生に使用する幻想郷ラジオのストリーム。 */
+    /**
+     * 再生に使用する幻想郷ラジオのストリーム（4番＝ロスレス配信・Ogg FLAC）。
+     * <p>
+     * 短時間に何本も接続すると配信側が 401 を返すことがあるが、
+     * 時間をおけば復帰する一時的なものなので番号は変更しない。
+     */
     public static final String STREAM_URL = "https://stream.gensokyoradio.net/4/";
 
     public GensokyoCmd(Bot bot) {
